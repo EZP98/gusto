@@ -525,12 +525,10 @@ export default function App() {
           <div style={{
             maxWidth: 600,
             margin: '0 auto',
-            display: 'flex',
-            flexDirection: 'column',
-            minHeight: 'calc(100vh - 200px)'
+            paddingBottom: 100 // Space for fixed input
           }}>
             {/* Chat Messages */}
-            <div style={{ flex: 1, marginBottom: 24 }}>
+            <div style={{ flex: 1 }}>
               {messages.length === 0 && !isLoading ? (
                 <div style={{ textAlign: 'center', padding: '60px 20px' }}>
                   <p style={{
@@ -596,15 +594,22 @@ export default function App() {
               )}
             </div>
 
-            {/* Chat Input - Sticky Bottom */}
-            <div style={{
-              position: 'sticky',
-              bottom: 0,
-              background: tokens.colors.paper,
-              paddingTop: 16,
-              paddingBottom: 16,
-              borderTop: `1px solid ${tokens.colors.paperDark}`
-            }}>
+          </div>
+        )}
+
+        {/* Fixed Chat Input - Only on chat screen */}
+        {screen === 'chat' && (
+          <div style={{
+            position: 'fixed',
+            bottom: 0,
+            left: isMobile ? 0 : 240, // Account for sidebar
+            right: 0,
+            background: tokens.colors.paper,
+            padding: '16px 20px',
+            borderTop: `1px solid ${tokens.colors.paperDark}`,
+            zIndex: 50
+          }}>
+            <div style={{ maxWidth: 600, margin: '0 auto' }}>
               <DashedBox style={{
                 background: tokens.colors.white,
                 display: 'flex',
