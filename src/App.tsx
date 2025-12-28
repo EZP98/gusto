@@ -143,6 +143,11 @@ export default function App() {
   const sendMessage = async () => {
     if (!message.trim() || isLoading) return;
 
+    // Navigate to chat screen when sending a message
+    if (screen !== 'home') {
+      setScreen('home');
+    }
+
     const userMessage = message.trim();
     setMessage('');
     setChatHistory(prev => [...prev, { role: 'user', content: userMessage }]);
