@@ -1,0 +1,116 @@
+@import "tailwindcss";
+
+/* Google Fonts - Caveat per lo stile Zine */
+@import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&display=swap');
+
+/* Custom theme - Zine Style */
+@theme {
+  /* Palette Zine */
+  --color-zine-cream: #FAF7F2;
+  --color-zine-paper: #F5F0E8;
+  --color-zine-ink: #2D2A26;
+  --color-zine-pencil: #6B6560;
+  --color-zine-faded: #8B857C;
+  --color-zine-light: #A8A4A0;
+  --color-zine-highlight: #E8E3DB;
+
+  --font-hand: 'Caveat', cursive;
+  --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+}
+
+/* Base styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Caveat', cursive;
+  background-color: #FAF7F2;
+  color: #2D2A26;
+  min-height: 100vh;
+}
+
+/* Hide scrollbars */
+::-webkit-scrollbar {
+  display: none;
+}
+
+* {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Paper texture overlay */
+.paper-texture {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.03;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Utility classes */
+.font-hand {
+  font-family: 'Caveat', cursive;
+}
+
+.text-ink {
+  color: #2D2A26;
+}
+
+.text-pencil {
+  color: #6B6560;
+}
+
+.text-faded {
+  color: #8B857C;
+}
+
+.bg-cream {
+  background-color: #FAF7F2;
+}
+
+.bg-paper {
+  background-color: #F5F0E8;
+}
+
+/* Zine-specific animations */
+@keyframes wobble {
+  0%, 100% { transform: rotate(-1deg); }
+  50% { transform: rotate(1deg); }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-wobble {
+  animation: wobble 3s ease-in-out infinite;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.5s ease-out forwards;
+}
+
+/* Selection style */
+::selection {
+  background-color: #E8E3DB;
+  color: #2D2A26;
+}
