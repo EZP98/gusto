@@ -96,9 +96,11 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   };
 
   try {
-    const { message, history = [] } = await request.json() as {
+    const { message, history = [], menuMode = false, dietMode = 'none' } = await request.json() as {
       message: string;
-      history?: Array<{ role: string; content: string }>
+      history?: Array<{ role: string; content: string }>;
+      menuMode?: boolean;
+      dietMode?: string;
     };
 
     if (!message) {
@@ -160,15 +162,27 @@ You have deep knowledge of:
 - Flavor pairings and ingredient combinations
 - Cooking techniques from basic to advanced
 - Ingredient substitutions and adaptations
-
-When you have relevant knowledge, share it naturally as part of your expertise - do NOT cite sources or mention where the knowledge comes from. Speak as an expert who simply knows.
 </knowledge>
+
+<rag_priority>
+CRITICAL: When <relevant_knowledge> is provided below, it contains VERIFIED and UP-TO-DATE information that MUST take precedence over your training data.
+
+Rules for using RAG context:
+1. If the context mentions specific facts (restaurant names, star ratings, dish names, ingredients), use EXACTLY those details - do not substitute with your own knowledge
+2. If the context says a chef has "3 stars" or works at "La Rei Natura", use those exact facts even if your training says otherwise
+3. For Michelin-starred chefs and their signature dishes, the RAG context is MORE ACCURATE than your training data
+4. If no relevant context is provided, you may use your general culinary knowledge
+5. NEVER invent specific details (star ratings, restaurant names, dish compositions) that are not in the context
+6. If unsure about specific facts not in the context, give general information or say you'd need to verify
+
+Speak naturally as an expert - don't mention "according to my sources" or cite the RAG. Just use the information as your own knowledge.
+</rag_priority>
 
 <rules>
 - Keep responses concise but complete (2-4 paragraphs unless a full recipe is requested)
 - When suggesting recipes, offer 2-3 options with brief descriptions
 - For full recipes, include: ingredients list, clear steps, timing, and practical tips
-- Use food-related emoji sparingly for warmth (🍳 🍝 🧄 etc)
+- NEVER use emoji in your responses - the UI has a hand-drawn style that doesn't use emoji
 - Give practical tips a home cook can actually use
 - If asked about ingredients, suggest what to cook with them
 - Adapt complexity to user's apparent skill level
@@ -179,9 +193,58 @@ For recipe suggestions: Brief intro + 2-3 options with name, description, time
 For full recipes: Ingredients → Steps → Tips
 For questions: Direct answer with practical context
 </response_format>
+${menuMode ? `
+<menu_mode>
+IMPORTANT: The user has MENU MODE enabled. They want a COMPLETE MENU, not just a single dish.
+
+When responding:
+1. Create a structured menu with multiple courses (antipasto, primo, secondo, contorno, dolce)
+2. Each course should have: name, brief description, estimated prep time
+3. Suggest wine pairings if appropriate
+4. Consider ingredient availability and cooking time logistics
+5. Make sure courses complement each other in flavors and textures
+6. Format the menu clearly with sections for each course
+
+Example structure:
+**Menu [tema/occasione]**
+
+**Antipasto** - Nome piatto
+Breve descrizione...
+
+**Primo** - Nome piatto
+Breve descrizione...
+
+**Secondo** - Nome piatto
+Breve descrizione...
+
+**Contorno** - Nome piatto
+Breve descrizione...
+
+**Dolce** - Nome piatto
+Breve descrizione...
+
+**Abbinamento vini:** ...
+</menu_mode>
+` : ''}
+${dietMode && dietMode !== 'none' ? `
+<diet_mode>
+IMPORTANT: The user follows a ${
+  dietMode === 'lowcarb' ? 'LOW CARB diet - minimize carbohydrates, avoid pasta, bread, rice, potatoes. Focus on proteins, vegetables, healthy fats' :
+  dietMode === 'keto' ? 'KETOGENIC diet - very low carb (under 20-50g/day), high fat, moderate protein. Avoid all sugars, grains, most fruits. Focus on meat, fish, eggs, cheese, nuts, low-carb vegetables' :
+  dietMode === 'vegetarian' ? 'VEGETARIAN diet - no meat or fish. Eggs and dairy are OK. Suggest plant proteins like legumes, tofu, tempeh, seitan' :
+  dietMode === 'vegan' ? 'VEGAN diet - no animal products at all. No meat, fish, eggs, dairy, honey. Focus on plant-based proteins, legumes, tofu, nutritional yeast for umami' :
+  dietMode === 'glutenfree' ? 'GLUTEN-FREE diet - avoid wheat, barley, rye, spelt. Use rice, corn, quinoa, buckwheat, certified gluten-free oats. Check all sauces and processed ingredients' :
+  dietMode === 'lactosefree' ? 'LACTOSE-FREE diet - avoid milk, cream, soft cheeses. Hard aged cheeses and butter are usually OK. Suggest plant milks, lactose-free alternatives' :
+  dietMode === 'highprotein' ? 'HIGH PROTEIN diet - maximize protein intake. Focus on lean meats, fish, eggs, legumes, Greek yogurt, cottage cheese. Include protein in every meal' :
+  'specific dietary restriction'
+}.
+
+ALL recipe suggestions and menus MUST comply with this diet. If the user asks for something incompatible, suggest a compliant alternative.
+</diet_mode>
+` : ''}
 ${ragContext}`;
 
-    // Call Anthropic API
+    // Call Anthropic API with streaming enabled
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -192,6 +255,7 @@ ${ragContext}`;
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 1500,
+        stream: true,  // Enable streaming
         system: systemPrompt,
         messages: messages,
       }),
@@ -206,14 +270,14 @@ ${ragContext}`;
       });
     }
 
-    const data = await response.json() as { content: Array<{ text: string }> };
-    const aiMessage = data.content[0]?.text || 'Mi dispiace, non sono riuscito a generare una risposta.';
-
-    return new Response(JSON.stringify({
-      message: aiMessage,
-      role: 'assistant'
-    }), {
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    // Return SSE stream directly
+    return new Response(response.body, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        ...corsHeaders
+      },
     });
 
   } catch (error) {

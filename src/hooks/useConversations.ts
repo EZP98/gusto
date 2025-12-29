@@ -11,28 +11,9 @@ function generateId(): string {
 }
 
 function generateTitle(firstMessage: string): string {
-  // Take first 30 chars, clean up, add emoji based on content
+  // Take first 30 chars, clean up
   const clean = firstMessage.slice(0, 30).trim();
-  const lower = firstMessage.toLowerCase();
-
-  let emoji = '💬';
-  if (lower.includes('pasta') || lower.includes('spaghetti') || lower.includes('carbonara')) {
-    emoji = '🍝';
-  } else if (lower.includes('dolce') || lower.includes('torta') || lower.includes('tiramisù')) {
-    emoji = '🍰';
-  } else if (lower.includes('pizza')) {
-    emoji = '🍕';
-  } else if (lower.includes('insalata') || lower.includes('verdur')) {
-    emoji = '🥗';
-  } else if (lower.includes('carne') || lower.includes('pollo') || lower.includes('bistecca')) {
-    emoji = '🍖';
-  } else if (lower.includes('pesce') || lower.includes('salmone')) {
-    emoji = '🐟';
-  } else if (lower.includes('colazione') || lower.includes('uova')) {
-    emoji = '🍳';
-  }
-
-  return `${emoji} ${clean}${firstMessage.length > 30 ? '...' : ''}`;
+  return `${clean}${firstMessage.length > 30 ? '...' : ''}`;
 }
 
 export function useConversations() {
@@ -119,24 +100,24 @@ export function useConversations() {
     setActiveId(id);
   }, []);
 
-  // Add a message to the active conversation
+  // Add a message to the active conversation (returns message ID for streaming)
   const addMessage = useCallback((
     role: 'user' | 'assistant',
     content: string,
     conversationId?: string
-  ): Message => {
+  ): string => {
     const targetId = conversationId || activeId;
+    const msgId = generateId();
 
-    // Parse recipe if assistant message
-    const parsedRecipe = role === 'assistant' ? parseRecipeFromText(content) ?? undefined : undefined;
-
-    // Generate quick replies if assistant message
-    const quickReplies = role === 'assistant'
-      ? generateQuickReplies(content, parsedRecipe || null)
-      : undefined;
+    // For user messages, parse recipe/quick replies immediately
+    // For assistant messages during streaming, these will be added by finalizeMessage
+    const parsedRecipe = role === 'user' ? undefined :
+      (content ? parseRecipeFromText(content) ?? undefined : undefined);
+    const quickReplies = role === 'user' ? undefined :
+      (content ? generateQuickReplies(content, parsedRecipe || null) : undefined);
 
     const newMessage: Message = {
-      id: generateId(),
+      id: msgId,
       role,
       content,
       timestamp: Date.now(),
@@ -166,7 +147,54 @@ export function useConversations() {
       });
     });
 
-    return newMessage;
+    return msgId;
+  }, [activeId]);
+
+  // Update message content during streaming
+  const updateMessageContent = useCallback((
+    messageId: string,
+    content: string,
+    conversationId?: string
+  ) => {
+    const targetId = conversationId || activeId;
+
+    setConversations(prev => prev.map(conv => {
+      if (conv.id === targetId) {
+        return {
+          ...conv,
+          messages: conv.messages.map(msg =>
+            msg.id === messageId ? { ...msg, content } : msg
+          ),
+        };
+      }
+      return conv;
+    }));
+  }, [activeId]);
+
+  // Finalize message after streaming (parse recipe + quick replies)
+  const finalizeMessage = useCallback((
+    messageId: string,
+    content: string,
+    conversationId?: string
+  ) => {
+    const targetId = conversationId || activeId;
+    const parsedRecipe = parseRecipeFromText(content) ?? undefined;
+    const quickReplies = generateQuickReplies(content, parsedRecipe || null);
+
+    setConversations(prev => prev.map(conv => {
+      if (conv.id === targetId) {
+        return {
+          ...conv,
+          messages: conv.messages.map(msg =>
+            msg.id === messageId
+              ? { ...msg, content, parsedRecipe, quickReplies }
+              : msg
+          ),
+          updatedAt: Date.now(),
+        };
+      }
+      return conv;
+    }));
   }, [activeId]);
 
   // Get messages for the active conversation
@@ -196,6 +224,8 @@ export function useConversations() {
     deleteConversation,
     setActiveConversation,
     addMessage,
+    updateMessageContent,
+    finalizeMessage,
     getHistoryForApi,
     clearAll,
   };

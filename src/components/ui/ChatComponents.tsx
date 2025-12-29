@@ -161,9 +161,13 @@ export const UserMessage: React.FC<MessageProps> = ({ children }) => (
 
 /**
  * Messaggio dell'AI
- * Con rendering Markdown
+ * Con rendering Markdown e cursore opzionale per streaming
  */
-export const AIMessage: React.FC<MessageProps> = ({ children }) => (
+interface AIMessageProps extends MessageProps {
+  isStreaming?: boolean;
+}
+
+export const AIMessage: React.FC<AIMessageProps> = ({ children, isStreaming }) => (
   <div style={{ marginBottom: 16 }} className="ai-message">
     <ReactMarkdown
       components={{
@@ -241,6 +245,46 @@ export const AIMessage: React.FC<MessageProps> = ({ children }) => (
     >
       {typeof children === 'string' ? children : String(children)}
     </ReactMarkdown>
+    {isStreaming && (
+      <>
+        {/* Hand-drawn animated dots */}
+        <span className="streaming-dots" style={{ display: 'inline-flex', gap: 4, marginLeft: 4, verticalAlign: 'middle' }}>
+          <svg width="6" height="6" viewBox="0 0 8 8" fill="none" className="dot dot-1">
+            <circle cx="4" cy="4" r="2.5" stroke={tokens.colors.inkLight} strokeWidth="1" fill="none"/>
+          </svg>
+          <svg width="6" height="6" viewBox="0 0 8 8" fill="none" className="dot dot-2">
+            <circle cx="4" cy="4" r="2.5" stroke={tokens.colors.inkLight} strokeWidth="1" fill="none"/>
+          </svg>
+          <svg width="6" height="6" viewBox="0 0 8 8" fill="none" className="dot dot-3">
+            <circle cx="4" cy="4" r="2.5" stroke={tokens.colors.inkLight} strokeWidth="1" fill="none"/>
+          </svg>
+        </span>
+        <style>{`
+          @keyframes dotPulse {
+            0%, 60%, 100% {
+              opacity: 0.3;
+              transform: scale(0.8);
+            }
+            30% {
+              opacity: 1;
+              transform: scale(1.2);
+            }
+          }
+          .streaming-dots .dot {
+            animation: dotPulse 1.2s ease-in-out infinite;
+          }
+          .streaming-dots .dot-1 {
+            animation-delay: 0s;
+          }
+          .streaming-dots .dot-2 {
+            animation-delay: 0.2s;
+          }
+          .streaming-dots .dot-3 {
+            animation-delay: 0.4s;
+          }
+        `}</style>
+      </>
+    )}
   </div>
 );
 
@@ -533,9 +577,15 @@ export const RecipeHeader: React.FC<RecipeHeaderProps> = ({
         )}
         {servings && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 14 }}>👤</span>
+            {/* Hand-drawn person icon */}
+            <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+              <circle cx="10" cy="5" r="3" stroke={tokens.colors.inkLight} strokeWidth="1.5" fill="none"/>
+              <path d="M4 18 Q4 12 10 12 Q16 12 16 18" stroke={tokens.colors.inkLight} strokeWidth="1.5" fill="none" strokeLinecap="round"/>
+            </svg>
             <span style={{ fontFamily: tokens.fonts.hand, fontSize: 15, color: tokens.colors.inkLight }}>
-              {servings} {typeof servings === 'number' && servings > 1 ? 'persone' : 'persona'}
+              {typeof servings === 'number'
+                ? `${servings} ${servings > 1 ? 'persone' : 'persona'}`
+                : servings}
             </span>
           </div>
         )}
@@ -756,7 +806,12 @@ export const StepsList: React.FC<StepsListProps> = ({ steps = [] }) => (
 export const RecipeNote: React.FC<MessageProps> = ({ children }) => (
   <SketchBox style={{ background: `${tokens.colors.paperDark}40`, marginTop: 20 }}>
     <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-      <span style={{ fontSize: 16 }}>📝</span>
+      {/* Hand-drawn note icon */}
+      <svg width="16" height="16" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0, marginTop: 2 }}>
+        <path d="M4 2 L14 2 L18 6 L18 18 L4 18 Z" stroke={tokens.colors.inkLight} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M14 2 L14 6 L18 6" stroke={tokens.colors.inkLight} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
+        <path d="M7 10 L15 10 M7 14 L13 14" stroke={tokens.colors.inkLight} strokeWidth="1" strokeLinecap="round"/>
+      </svg>
       <p style={{
         fontFamily: tokens.fonts.hand,
         fontSize: 15,

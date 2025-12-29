@@ -18,10 +18,10 @@ interface Message {
 }
 
 const suggestions = [
-  { icon: '📖', text: 'Dammi una ricetta veloce per la cena' },
-  { icon: '⏰', text: 'Cosa posso cucinare in 20 minuti?' },
-  { icon: '🍗', text: 'Suggeriscimi un piatto con il pollo' },
-  { icon: '🥗', text: 'Ho solo verdure, cosa preparo?' },
+  { icon: '', text: 'Dammi una ricetta veloce per la cena' },
+  { icon: '', text: 'Cosa posso cucinare in 20 minuti?' },
+  { icon: '', text: 'Suggeriscimi un piatto con il pollo' },
+  { icon: '', text: 'Ho solo verdure, cosa preparo?' },
 ];
 
 export default function ChatPage() {
@@ -130,7 +130,7 @@ Vuoi la ricetta dettagliata di qualcuna?`;
 Quale ti ispira?`;
     }
 
-    return `Ciao! Sono lo Chef AI 👨‍🍳
+    return `Ciao! Sono lo Chef AI
 
 Posso aiutarti con:
 • Ricette classiche o creative

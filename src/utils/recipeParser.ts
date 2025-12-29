@@ -47,13 +47,24 @@ function extractSection(text: string, headers: string[]): string[] {
 }
 
 /**
+ * Strip markdown formatting from text
+ */
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/^\*\*|\*\*$/g, '') // Remove ** at start/end
+    .replace(/^\*|\*$/g, '')     // Remove * at start/end
+    .replace(/^_|_$/g, '')       // Remove _ at start/end
+    .trim();
+}
+
+/**
  * Extract recipe name from text
  */
 function extractName(text: string): string {
   // Try markdown heading
   const headingMatch = text.match(/^#+\s*(.+)/m);
   if (headingMatch) {
-    return headingMatch[1].trim();
+    return stripMarkdown(headingMatch[1]);
   }
 
   // Try bold text at start
@@ -65,7 +76,7 @@ function extractName(text: string): string {
   // Try first non-empty line
   const firstLine = text.split('\n').find(l => l.trim().length > 0);
   if (firstLine) {
-    return firstLine.slice(0, 50).trim();
+    return stripMarkdown(firstLine.slice(0, 50));
   }
 
   return 'Ricetta';
@@ -142,4 +153,31 @@ export function containsRecipe(text: string): boolean {
     (lowerText.includes('procedimento') || lowerText.includes('preparazione') ||
      lowerText.includes('steps') || lowerText.includes('istruzioni'))
   );
+}
+
+/**
+ * Extract intro text (before recipe starts) from AI response
+ * Returns text before the recipe title/ingredients section
+ */
+export function extractIntroText(text: string): string {
+  const lines = text.split('\n');
+  const introLines: string[] = [];
+
+  for (const line of lines) {
+    const lowerLine = line.toLowerCase().trim();
+
+    // Stop when we hit the recipe title or ingredients
+    if (
+      lowerLine.match(/^#+\s*\*?\*?[A-Z]/) || // Markdown heading with caps (recipe title)
+      lowerLine.includes('ingredienti') ||
+      lowerLine.includes('ingredients') ||
+      lowerLine.match(/^\*\*[A-Z]{3,}/) // Bold all-caps title
+    ) {
+      break;
+    }
+
+    introLines.push(line);
+  }
+
+  return introLines.join('\n').trim();
 }
