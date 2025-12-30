@@ -7,9 +7,9 @@ import {
   ZineInput,
   HandDrawnFrame,
   DoubleFrame,
-  SketchChef,
   HandArrow
 } from '../../components/ui/ZineUI';
+import { GustoLogo } from '../../components/ui/GustoLogo';
 
 interface Message {
   id: string;
@@ -130,7 +130,7 @@ Vuoi la ricetta dettagliata di qualcuna?`;
 Quale ti ispira?`;
     }
 
-    return `Ciao! Sono lo Chef AI
+    return `Ciao! Sono Gusto
 
 Posso aiutarti con:
 • Ricette classiche o creative
@@ -147,9 +147,9 @@ Cosa ti piacerebbe cucinare oggi?`;
 
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <SketchChef size={48} />
+          <GustoLogo size={48} />
           <ZineText size="xl" style={{ display: 'block', marginTop: '8px' }}>
-            Chiedi allo Chef
+            Chiedi a Gusto
           </ZineText>
         </div>
 
@@ -159,7 +159,7 @@ Cosa ti piacerebbe cucinare oggi?`;
             {/* Welcome */}
             <DoubleFrame style={{ background: '#FAF7F2', padding: '24px', marginBottom: '32px', textAlign: 'center' }}>
               <ZineText size="lg" style={{ display: 'block', marginBottom: '8px' }}>
-                Ciao! Sono il tuo Chef AI
+                Ciao! Sono Gusto
               </ZineText>
               <ZineText size="md" style={{ color: '#6B6560', lineHeight: 1.5 }}>
                 Chiedimi ricette, consigli di cucina, o cosa fare con gli ingredienti che hai.
@@ -203,7 +203,7 @@ Cosa ti piacerebbe cucinare oggi?`;
               >
                 {message.role === 'assistant' && (
                   <div style={{ marginRight: '12px', flexShrink: 0 }}>
-                    <SketchChef size={32} />
+                    <GustoLogo size={32} />
                   </div>
                 )}
 
@@ -230,7 +230,7 @@ Cosa ti piacerebbe cucinare oggi?`;
 
             {isLoading && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <SketchChef size={32} />
+                <GustoLogo size={32} />
                 <HandDrawnFrame style={{ padding: '12px 16px' }}>
                   <ZineText size="md" style={{ color: '#8B857C' }}>
                     sto pensando...

@@ -3,17 +3,17 @@ import { Link, useLocation } from 'react-router-dom';
 import {
   ZineText,
   HandDrawnFrame,
-  SketchChef,
   SketchBook,
   SketchCalendar,
   SketchX
 } from '../ui/ZineUI';
+import { GustoLogo } from '../ui/GustoLogo';
 
 const navItems = [
-  { path: '/', label: 'home', Icon: SketchChef },
+  { path: '/', label: 'home', Icon: GustoLogo },
   { path: '/recipes', label: 'ricette', Icon: SketchBook },
   { path: '/meal-planner', label: 'planner', Icon: SketchCalendar },
-  { path: '/chat', label: 'chef AI', Icon: SketchChef },
+  { path: '/chat', label: 'gusto', Icon: GustoLogo },
 ];
 
 export default function Navbar() {
@@ -42,8 +42,8 @@ export default function Navbar() {
         }}>
           {/* Logo */}
           <Link to="/" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <SketchChef size={32} />
-            <ZineText size="lg">Chef AI</ZineText>
+            <GustoLogo size={32} />
+            <ZineText size="lg">Gusto</ZineText>
           </Link>
 
           {/* Desktop Links */}

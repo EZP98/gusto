@@ -9,7 +9,6 @@ import {
   DoubleFrame,
   UnderlinedText,
   HandArrow,
-  SketchChef,
   SketchBook,
   SketchCalendar,
   SketchEggs,
@@ -19,6 +18,7 @@ import {
   SketchBasil,
   SketchHeart
 } from '../../components/ui/ZineUI';
+import { GustoLogo } from '../../components/ui/GustoLogo';
 
 const featuredRecipes = [
   {
@@ -60,11 +60,11 @@ export default function HomePage() {
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '48px' }}>
           <div style={{ marginBottom: '16px' }}>
-            <SketchChef size={80} />
+            <GustoLogo size={80} />
           </div>
 
           <ZineText size="xxl" style={{ display: 'block', marginBottom: '8px' }}>
-            Chef AI
+            Gusto
           </ZineText>
 
           <ZineText size="lg" style={{ color: '#8B857C', display: 'block', marginBottom: '24px' }}>
@@ -155,9 +155,9 @@ export default function HomePage() {
 
           <Link to="/chat" style={{ textDecoration: 'none' }}>
             <HandDrawnFrame style={{ textAlign: 'center', padding: '20px 12px' }}>
-              <SketchChef size={40} />
+              <GustoLogo size={40} />
               <ZineText size="sm" style={{ display: 'block', marginTop: '8px' }}>
-                chef AI
+                gusto
               </ZineText>
             </HandDrawnFrame>
           </Link>
