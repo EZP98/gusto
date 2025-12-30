@@ -10,6 +10,7 @@ import {
   HandArrow
 } from '../../components/ui/ZineUI';
 import { GustoLogo } from '../../components/ui/GustoLogo';
+import { FormattedMessage } from '../../components/ui/FormattedMessage';
 
 interface Message {
   id: string;
@@ -18,16 +19,17 @@ interface Message {
 }
 
 const suggestions = [
-  { icon: '', text: 'Dammi una ricetta veloce per la cena' },
-  { icon: '', text: 'Cosa posso cucinare in 20 minuti?' },
-  { icon: '', text: 'Suggeriscimi un piatto con il pollo' },
-  { icon: '', text: 'Ho solo verdure, cosa preparo?' },
+  { text: 'Come si fa la carbonara?' },
+  { text: 'Cosa posso cucinare in 20 minuti?' },
+  { text: 'Come si preparano gli scialatielli?' },
+  { text: 'Suggeriscimi un piatto con il pollo' },
 ];
 
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [streamingContent, setStreamingContent] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const initialMessageSent = useRef(false);
@@ -38,14 +40,13 @@ export default function ChatPage() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, streamingContent]);
 
   // Handle initial message from homepage
   useEffect(() => {
     const state = location.state as { initialMessage?: string } | null;
     if (state?.initialMessage && !initialMessageSent.current) {
       initialMessageSent.current = true;
-      // Small delay to ensure component is mounted
       setTimeout(() => {
         handleSend(state.initialMessage);
       }, 100);
@@ -65,80 +66,77 @@ export default function ChatPage() {
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
+    setStreamingContent('');
 
-    // TODO: Replace with real API call
-    setTimeout(() => {
+    try {
+      // Build history from previous messages
+      const history = messages.map(m => ({
+        role: m.role,
+        content: m.content
+      }));
+
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: messageText,
+          history
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('API error');
+      }
+
+      // Handle SSE streaming
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let accumulatedContent = '';
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.type === 'content_block_delta' && data.delta?.text) {
+                  accumulatedContent += data.delta.text;
+                  setStreamingContent(accumulatedContent);
+                }
+              } catch {
+                // Ignore parse errors for non-JSON lines
+              }
+            }
+          }
+        }
+      }
+
+      // Add completed message
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: getAIResponse(messageText),
+        content: accumulatedContent,
       };
       setMessages((prev) => [...prev, assistantMessage]);
+      setStreamingContent('');
+
+    } catch (error) {
+      console.error('Chat error:', error);
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: 'Mi dispiace, c\'è stato un errore. Riprova tra poco.',
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
       setIsLoading(false);
-    }, 1500);
-  };
-
-  const getAIResponse = (query: string): string => {
-    if (query.toLowerCase().includes('carbonara')) {
-      return `Pasta alla Carbonara 🍝
-
-Ingredienti per 4 persone:
-• 400g spaghetti
-• 200g guanciale
-• 4 tuorli d'uovo
-• 100g pecorino romano
-• Pepe nero q.b.
-
-Procedimento:
-1. Taglia il guanciale a listarelle
-2. Rosolalo in padella senza olio
-3. Cuoci la pasta al dente
-4. Mescola tuorli + pecorino + pepe
-5. Unisci pasta e guanciale (fuori dal fuoco!)
-6. Aggiungi la crema e manteca
-
-★ Consiglio: mai la panna! La cremosità viene dall'uovo.`;
     }
-
-    if (query.toLowerCase().includes('veloce') || query.toLowerCase().includes('20 minuti')) {
-      return `Ecco alcune idee veloci:
-
-1. Aglio, Olio e Peperoncino → 15 min
-2. Frittata di verdure → 15 min
-3. Bruschette miste → 10 min
-4. Pasta al tonno → 20 min
-5. Uova strapazzate con toast → 10 min
-
-Vuoi la ricetta dettagliata di qualcuna?`;
-    }
-
-    if (query.toLowerCase().includes('pollo')) {
-      return `Con il pollo puoi preparare:
-
-🍗 Pollo alla cacciatora
-   → classico con pomodoro e olive
-
-🍗 Pollo al limone
-   → leggero e profumato
-
-🍗 Pollo al curry
-   → per un tocco esotico
-
-🍗 Petto impanato
-   → croccante e amato da tutti
-
-Quale ti ispira?`;
-    }
-
-    return `Ciao! Sono Gusto
-
-Posso aiutarti con:
-• Ricette classiche o creative
-• Suggerimenti basati sui tuoi ingredienti
-• Tecniche di cucina
-• Sostituzioni per ingredienti mancanti
-
-Cosa ti piacerebbe cucinare oggi?`;
   };
 
   return (
@@ -154,7 +152,7 @@ Cosa ti piacerebbe cucinare oggi?`;
         </div>
 
         {/* Messages */}
-        {messages.length === 0 ? (
+        {messages.length === 0 && !streamingContent ? (
           <div>
             {/* Welcome */}
             <DoubleFrame style={{ background: '#FAF7F2', padding: '24px', marginBottom: '32px', textAlign: 'center' }}>
@@ -183,8 +181,7 @@ Cosa ti piacerebbe cucinare oggi?`;
                     textAlign: 'left'
                   }}
                 >
-                  <HandDrawnFrame style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ fontSize: '24px' }}>{suggestion.icon}</span>
+                  <HandDrawnFrame style={{ padding: '12px 16px' }}>
                     <ZineText size="md">{suggestion.text}</ZineText>
                   </HandDrawnFrame>
                 </button>
@@ -208,27 +205,55 @@ Cosa ti piacerebbe cucinare oggi?`;
                 )}
 
                 <div style={{
-                  maxWidth: '80%',
+                  maxWidth: '85%',
                   padding: '16px',
                   background: message.role === 'user' ? '#2D2A26' : '#FAF7F2',
                   border: message.role === 'assistant' ? '1.5px solid #2D2A26' : 'none',
                   borderRadius: '4px'
                 }}>
-                  <ZineText
-                    size="md"
-                    style={{
-                      color: message.role === 'user' ? '#FAF7F2' : '#2D2A26',
-                      whiteSpace: 'pre-wrap',
-                      lineHeight: 1.5
-                    }}
-                  >
-                    {message.content}
-                  </ZineText>
+                  {message.role === 'user' ? (
+                    <ZineText
+                      size="md"
+                      style={{
+                        color: '#FAF7F2',
+                        lineHeight: 1.5
+                      }}
+                    >
+                      {message.content}
+                    </ZineText>
+                  ) : (
+                    <FormattedMessage
+                      content={message.content}
+                      style={{ color: '#2D2A26' }}
+                    />
+                  )}
                 </div>
               </div>
             ))}
 
-            {isLoading && (
+            {/* Streaming message */}
+            {streamingContent && (
+              <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                <div style={{ marginRight: '12px', flexShrink: 0 }}>
+                  <GustoLogo size={32} />
+                </div>
+                <div style={{
+                  maxWidth: '85%',
+                  padding: '16px',
+                  background: '#FAF7F2',
+                  border: '1.5px solid #2D2A26',
+                  borderRadius: '4px'
+                }}>
+                  <FormattedMessage
+                    content={streamingContent}
+                    style={{ color: '#2D2A26' }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Loading indicator */}
+            {isLoading && !streamingContent && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <GustoLogo size={32} />
                 <HandDrawnFrame style={{ padding: '12px 16px' }}>
