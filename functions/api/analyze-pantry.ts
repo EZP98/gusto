@@ -1,4 +1,5 @@
 // Cloudflare Pages Function for Pantry Image Analysis with Claude Vision
+// Supports multiple images (up to 3)
 
 interface Env {
   ANTHROPIC_API_KEY: string;
@@ -14,54 +15,63 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   };
 
   try {
-    const { image } = await request.json() as { image: string };
+    const body = await request.json() as { image?: string; images?: string[] };
 
-    if (!image) {
-      return new Response(JSON.stringify({ error: 'Image is required' }), {
+    // Support both single image and multiple images
+    const images = body.images || (body.image ? [body.image] : []);
+
+    if (images.length === 0) {
+      return new Response(JSON.stringify({ error: 'At least one image is required' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
 
-    // Extract base64 data and media type
-    const matches = image.match(/^data:([^;]+);base64,(.+)$/);
-    if (!matches) {
-      return new Response(JSON.stringify({ error: 'Invalid image format' }), {
+    if (images.length > 3) {
+      return new Response(JSON.stringify({ error: 'Maximum 3 images allowed' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
 
-    const mediaType = matches[1] as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
-    const imageData = matches[2];
+    // Build content array with all images
+    const contentArray: Array<{
+      type: 'image' | 'text';
+      source?: {
+        type: 'base64';
+        media_type: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+        data: string;
+      };
+      text?: string;
+    }> = [];
 
-    // Call Claude Vision API
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1000,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: mediaType,
-                  data: imageData,
-                },
-              },
-              {
-                type: 'text',
-                text: `Analizza questa foto di una dispensa/frigorifero/scaffale cucina.
-Identifica TUTTI gli ingredienti alimentari visibili nella foto.
+    for (const image of images) {
+      const matches = image.match(/^data:([^;]+);base64,(.+)$/);
+      if (!matches) {
+        return new Response(JSON.stringify({ error: 'Invalid image format' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        });
+      }
+
+      const mediaType = matches[1] as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+      const imageData = matches[2];
+
+      contentArray.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: mediaType,
+          data: imageData,
+        },
+      });
+    }
+
+    // Add the text prompt
+    contentArray.push({
+      type: 'text',
+      text: `Analizza ${images.length > 1 ? 'queste foto' : 'questa foto'} di dispensa/frigorifero/scaffale cucina.
+Identifica TUTTI gli ingredienti alimentari visibili ${images.length > 1 ? 'nelle foto' : 'nella foto'}.
 
 Rispondi SOLO con un JSON valido nel formato:
 {
@@ -76,9 +86,25 @@ Regole:
 - Stima la quantità (es: "3", "200g", "1 bottiglia", "1 confezione")
 - Includi SOLO cibi/ingredienti, non utensili o contenitori vuoti
 - Sii specifico (es: "Parmigiano Reggiano" invece di "formaggio")
-- Se non riesci a identificare un ingrediente, omettilo`
-              }
-            ],
+- Se non riesci a identificare un ingrediente, omettilo
+- Unisci gli ingredienti da tutte le foto, evitando duplicati`
+    });
+
+    // Call Claude Vision API
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1500,
+        messages: [
+          {
+            role: 'user',
+            content: contentArray,
           },
         ],
       }),

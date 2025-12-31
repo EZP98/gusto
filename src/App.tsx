@@ -201,6 +201,15 @@ export default function App() {
 
 
   const [isAnalyzingPhoto, setIsAnalyzingPhoto] = useState(false);
+  const [capturedPhotos, setCapturedPhotos] = useState<string[]>([]);
+  const [dishSuggestions, setDishSuggestions] = useState<Array<{
+    name: string;
+    description: string;
+    difficulty: string;
+    time: string;
+    mainIngredients: string[];
+  }>>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [menuMode, setMenuMode] = useState(false);
   const [stellatoMode, setStellatoMode] = useState(false);
   const [recuperoMode, setRecuperoMode] = useState(false);
@@ -241,75 +250,124 @@ export default function App() {
     return SketchBowl; // default
   };
 
-  // Handle photo upload and AI analysis
-  const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle photo capture (add to array, max 3)
+  const handlePhotoCapture = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    // Require authentication to use pantry AI
+    // Require authentication
     if (!isAuthenticated) {
       setAuthModalOpen(true);
       return;
     }
 
+    if (capturedPhotos.length >= 3) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const base64 = e.target?.result as string;
+      setCapturedPhotos(prev => [...prev, base64]);
+    };
+    reader.readAsDataURL(file);
+
+    // Reset input to allow same file
+    event.target.value = '';
+  };
+
+  // Remove a photo from the array
+  const handleRemovePhoto = (index: number) => {
+    setCapturedPhotos(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Analyze all captured photos
+  const handleAnalyzePhotos = async () => {
+    if (capturedPhotos.length === 0) return;
+
     setIsAnalyzingPhoto(true);
 
     try {
-      // Convert to base64
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const base64 = e.target?.result as string;
+      const response = await fetch('/api/analyze-pantry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: capturedPhotos }),
+      });
 
-        // Call vision API
-        const response = await fetch('/api/analyze-pantry', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: base64 }),
-        });
+      if (!response.ok) throw new Error('Vision API error');
 
-        if (!response.ok) throw new Error('Vision API error');
+      const data = await response.json();
 
-        const data = await response.json();
+      if (data.ingredients && Array.isArray(data.ingredients)) {
+        // Save ingredients to cloud
+        const newItems = data.ingredients.map((ing: { name: string; qty: string }) => ({
+          name: ing.name,
+          quantity: ing.qty || '?',
+          expiring: false,
+        }));
 
-        if (data.ingredients && Array.isArray(data.ingredients)) {
-          // Save ingredients to cloud
-          const newItems = data.ingredients.map((ing: { name: string; qty: string }) => ({
-            name: ing.name,
-            quantity: ing.qty || '?',
-            expiring: false,
-          }));
+        await addPantryItems(newItems);
 
-          await addPantryItems(newItems);
-          setIsAnalyzingPhoto(false);
+        // Clear captured photos
+        setCapturedPhotos([]);
 
-          // Automatically ask AI to suggest dishes based on found ingredients
-          if (newItems.length > 0) {
-            const ingredientsList = newItems.map((i: { name: string; quantity: string }) => `${i.name} (${i.quantity})`).join(', ');
-            const suggestionMessage = language === 'it'
-              ? `Ho questi ingredienti nella dispensa: ${ingredientsList}. Cosa posso cucinare?`
-              : language === 'en'
-              ? `I have these ingredients in my pantry: ${ingredientsList}. What can I cook?`
-              : language === 'fr'
-              ? `J'ai ces ingrédients dans mon garde-manger: ${ingredientsList}. Que puis-je cuisiner?`
-              : language === 'es'
-              ? `Tengo estos ingredientes en mi despensa: ${ingredientsList}. ¿Qué puedo cocinar?`
-              : language === 'ja'
-              ? `食料庫にこれらの材料があります: ${ingredientsList}。何が作れますか?`
-              : `我的食品儲藏室裡有這些食材：${ingredientsList}。我可以煮什麼？`;
-
-            // Send message to chat (this will navigate to chat screen)
-            sendMessage(suggestionMessage);
-          }
-        } else {
-          setIsAnalyzingPhoto(false);
+        // Automatically get dish suggestions
+        if (newItems.length > 0) {
+          handleGetSuggestions([...pantryItems.map(i => i.name), ...newItems.map((i: { name: string }) => i.name)]);
         }
-      };
-
-      reader.readAsDataURL(file);
+      }
     } catch (error) {
       console.error('Photo analysis error:', error);
+    } finally {
       setIsAnalyzingPhoto(false);
     }
+  };
+
+  // Get dish suggestions based on pantry items
+  const handleGetSuggestions = async (ingredients?: string[]) => {
+    const ingredientNames = ingredients || pantryItems.map(i => i.name);
+    if (ingredientNames.length === 0) return;
+
+    setIsLoadingSuggestions(true);
+
+    try {
+      const response = await fetch('/api/suggest-dishes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ingredients: ingredientNames,
+          language,
+          count: 10,
+        }),
+      });
+
+      if (!response.ok) throw new Error('Suggestions API error');
+
+      const data = await response.json();
+
+      if (data.dishes && Array.isArray(data.dishes)) {
+        setDishSuggestions(data.dishes);
+      }
+    } catch (error) {
+      console.error('Suggestions error:', error);
+    } finally {
+      setIsLoadingSuggestions(false);
+    }
+  };
+
+  // When user clicks on a dish, get full recipe in chat
+  const handleDishClick = (dishName: string) => {
+    const msg = language === 'it'
+      ? `Dammi la ricetta completa per: ${dishName}`
+      : language === 'en'
+      ? `Give me the complete recipe for: ${dishName}`
+      : language === 'fr'
+      ? `Donne-moi la recette complète pour: ${dishName}`
+      : language === 'es'
+      ? `Dame la receta completa de: ${dishName}`
+      : language === 'ja'
+      ? `${dishName}の完全なレシピを教えて`
+      : `给我${dishName}的完整食谱`;
+
+    sendMessage(msg);
   };
 
   const sendMessage = async (customMessage?: string) => {
@@ -1462,43 +1520,243 @@ export default function App() {
         {/* ============ DISPENSA ============ */}
         {screen === 'pantry' && (
           <div style={{ maxWidth: 600, margin: '0 auto' }}>
-            {/* Photo Upload Button */}
-            <div style={{
-              border: '2px dashed #2D2A26',
-              borderRadius: 12,
-              padding: 24,
-              marginBottom: 28,
-              textAlign: 'center',
-              background: isAnalyzingPhoto ? '#F0EBE3' : 'transparent',
-              cursor: isAnalyzingPhoto ? 'wait' : 'pointer',
-              position: 'relative'
-            }}>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handlePhotoUpload}
-                disabled={isAnalyzingPhoto}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
-                  opacity: 0,
-                  cursor: isAnalyzingPhoto ? 'wait' : 'pointer'
-                }}
-              />
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                <CameraIcon />
-                <ZineText size="lg" style={{ color: '#2D2A26' }}>
-                  {isAnalyzingPhoto ? t('pantry.analyzing') : t('pantry.takePhoto')}
-                </ZineText>
-                <ZineText size="sm" style={{ color: '#8B857C' }}>
-                  {t('pantry.aiRecognizes')}
-                </ZineText>
-              </div>
+            {/* Photo Capture Section */}
+            <div style={{ marginBottom: 28 }}>
+              {/* Photo thumbnails */}
+              {capturedPhotos.length > 0 && (
+                <div style={{
+                  display: 'flex',
+                  gap: 12,
+                  marginBottom: 16,
+                  flexWrap: 'wrap',
+                }}>
+                  {capturedPhotos.map((photo, index) => (
+                    <div key={index} style={{ position: 'relative' }}>
+                      <img
+                        src={photo}
+                        alt={`Foto ${index + 1}`}
+                        style={{
+                          width: 100,
+                          height: 100,
+                          objectFit: 'cover',
+                          borderRadius: 8,
+                          border: '2px solid #2D2A26',
+                        }}
+                      />
+                      <button
+                        onClick={() => handleRemovePhoto(index)}
+                        style={{
+                          position: 'absolute',
+                          top: -8,
+                          right: -8,
+                          width: 24,
+                          height: 24,
+                          borderRadius: '50%',
+                          background: '#2D2A26',
+                          color: '#FAF7F2',
+                          border: 'none',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 14,
+                          fontWeight: 'bold',
+                        }}
+                      >
+                        x
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add photo button */}
+              {capturedPhotos.length < 3 && !isAnalyzingPhoto && (
+                <div style={{
+                  border: '2px dashed #2D2A26',
+                  borderRadius: 12,
+                  padding: capturedPhotos.length > 0 ? 16 : 24,
+                  textAlign: 'center',
+                  cursor: 'pointer',
+                  position: 'relative',
+                }}>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handlePhotoCapture}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      opacity: 0,
+                      cursor: 'pointer',
+                    }}
+                  />
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+                    <CameraIcon />
+                    <ZineText size="lg" style={{ color: '#2D2A26' }}>
+                      {capturedPhotos.length === 0 ? t('pantry.takePhoto') : t('pantry.addAnotherPhoto') || 'Aggiungi altra foto'}
+                    </ZineText>
+                    <ZineText size="sm" style={{ color: '#8B857C' }}>
+                      {capturedPhotos.length === 0
+                        ? t('pantry.aiRecognizes')
+                        : `${capturedPhotos.length}/3 ${t('pantry.photos') || 'foto'}`}
+                    </ZineText>
+                  </div>
+                </div>
+              )}
+
+              {/* Analyze button */}
+              {capturedPhotos.length > 0 && (
+                <button
+                  onClick={handleAnalyzePhotos}
+                  disabled={isAnalyzingPhoto}
+                  style={{
+                    width: '100%',
+                    marginTop: 16,
+                    padding: '14px 20px',
+                    background: isAnalyzingPhoto ? '#A8A4A0' : '#2D2A26',
+                    color: '#FAF7F2',
+                    border: 'none',
+                    borderRadius: 8,
+                    fontFamily: "'Caveat', cursive",
+                    fontSize: 20,
+                    cursor: isAnalyzingPhoto ? 'wait' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 10,
+                  }}
+                >
+                  {isAnalyzingPhoto ? (
+                    <>
+                      <span style={{ animation: 'spin 1s linear infinite' }}>*</span>
+                      {t('pantry.analyzing')}
+                    </>
+                  ) : (
+                    <>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 2L14 8H20L15 12L17 18L12 14L7 18L9 12L4 8H10L12 2Z" strokeLinejoin="round"/>
+                      </svg>
+                      {t('pantry.analyzePhotos') || 'Analizza e suggerisci piatti'}
+                    </>
+                  )}
+                </button>
+              )}
             </div>
+
+            {/* Dish Suggestions */}
+            {(dishSuggestions.length > 0 || isLoadingSuggestions) && (
+              <section style={{ marginBottom: 32 }}>
+                <div style={{ marginBottom: 16 }}>
+                  <ZineText size="lg" style={{ display: 'block' }}>
+                    {t('pantry.dishSuggestions') || 'Piatti suggeriti'}
+                  </ZineText>
+                  <svg width="120" height="6" viewBox="0 0 120 6" style={{ display: 'block', marginTop: 6 }}>
+                    <path d="M0 3 Q15 0 30 3 Q45 6 60 3 Q75 0 90 3 Q105 6 120 3" stroke="#C4C0B9" strokeWidth="1" fill="none"/>
+                  </svg>
+                </div>
+
+                {isLoadingSuggestions ? (
+                  <div style={{ textAlign: 'center', padding: 32 }}>
+                    <ZineText size="md" style={{ color: '#8B857C' }}>
+                      {t('pantry.loadingSuggestions') || 'Sto pensando ai piatti...'}
+                    </ZineText>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    {dishSuggestions.map((dish, index) => (
+                      <button
+                        key={index}
+                        onClick={() => handleDishClick(dish.name)}
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'flex-start',
+                          padding: '16px 20px',
+                          background: '#FFFFFF',
+                          border: '1.5px solid #E8E4DE',
+                          borderRadius: 8,
+                          cursor: 'pointer',
+                          textAlign: 'left',
+                          transition: 'border-color 0.2s',
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.borderColor = '#2D2A26'}
+                        onMouseLeave={(e) => e.currentTarget.style.borderColor = '#E8E4DE'}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'flex-start' }}>
+                          <ZineText size="lg" style={{ color: '#2D2A26', fontWeight: 500 }}>
+                            {dish.name}
+                          </ZineText>
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <span style={{
+                              fontFamily: "'Caveat', cursive",
+                              fontSize: 13,
+                              color: '#8B857C',
+                              background: '#F5F1EA',
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                            }}>
+                              {dish.time}
+                            </span>
+                            <span style={{
+                              fontFamily: "'Caveat', cursive",
+                              fontSize: 13,
+                              color: dish.difficulty === 'facile' || dish.difficulty === 'easy' ? '#4A7C59' :
+                                     dish.difficulty === 'media' || dish.difficulty === 'medium' ? '#B8860B' : '#8B4513',
+                              background: '#F5F1EA',
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                            }}>
+                              {dish.difficulty}
+                            </span>
+                          </div>
+                        </div>
+                        <ZineText size="sm" style={{ color: '#8B857C', marginTop: 6 }}>
+                          {dish.description}
+                        </ZineText>
+                        <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                          {dish.mainIngredients.slice(0, 4).map((ing, i) => (
+                            <span key={i} style={{
+                              fontFamily: "'Caveat', cursive",
+                              fontSize: 12,
+                              color: '#2D2A26',
+                              background: '#FAF7F2',
+                              border: '1px dashed #C4C0B9',
+                              padding: '2px 6px',
+                              borderRadius: 3,
+                            }}>
+                              {ing}
+                            </span>
+                          ))}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Clear suggestions */}
+                <button
+                  onClick={() => setDishSuggestions([])}
+                  style={{
+                    marginTop: 12,
+                    padding: '8px 16px',
+                    background: 'transparent',
+                    border: '1px solid #C4C0B9',
+                    borderRadius: 6,
+                    fontFamily: "'Caveat', cursive",
+                    fontSize: 15,
+                    color: '#8B857C',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {t('misc.clear') || 'Nascondi suggerimenti'}
+                </button>
+              </section>
+            )}
 
             {/* Empty State */}
             {pantryItems.length === 0 && !isAnalyzingPhoto && (
@@ -1638,21 +1896,8 @@ export default function App() {
 
                   {/* Ask AI what to cook button */}
                   <button
-                    onClick={() => {
-                      const ingredientsList = pantryItems.map(i => i.name).join(', ');
-                      const msg = language === 'it'
-                        ? `Cosa posso cucinare con: ${ingredientsList}?`
-                        : language === 'en'
-                        ? `What can I cook with: ${ingredientsList}?`
-                        : language === 'fr'
-                        ? `Que puis-je cuisiner avec: ${ingredientsList}?`
-                        : language === 'es'
-                        ? `¿Qué puedo cocinar con: ${ingredientsList}?`
-                        : language === 'ja'
-                        ? `${ingredientsList}で何が作れる？`
-                        : `用${ingredientsList}可以煮什麼？`;
-                      sendMessage(msg);
-                    }}
+                    onClick={() => handleGetSuggestions()}
+                    disabled={isLoadingSuggestions}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -1661,19 +1906,19 @@ export default function App() {
                       width: '100%',
                       marginTop: 20,
                       padding: '12px 20px',
-                      background: '#2D2A26',
+                      background: isLoadingSuggestions ? '#A8A4A0' : '#2D2A26',
                       color: '#FAF7F2',
                       border: 'none',
                       borderRadius: 8,
                       fontFamily: "'Caveat', cursive",
                       fontSize: 18,
-                      cursor: 'pointer'
+                      cursor: isLoadingSuggestions ? 'wait' : 'pointer'
                     }}
                   >
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
                       <path d="M12 2L14 8H20L15 12L17 18L12 14L7 18L9 12L4 8H10L12 2Z" strokeLinejoin="round"/>
                     </svg>
-                    {t('pantry.suggestDishes')}
+                    {isLoadingSuggestions ? (t('pantry.loadingSuggestions') || 'Caricamento...') : t('pantry.suggestDishes')}
                   </button>
                 </section>
               </>
