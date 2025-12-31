@@ -25,6 +25,20 @@
   padding: 0;
 }
 
+/* Remove focus rings */
+*:focus {
+  outline: none;
+}
+
+button:focus,
+input:focus,
+textarea:focus,
+select:focus,
+a:focus {
+  outline: none;
+  box-shadow: none;
+}
+
 html {
   scroll-behavior: smooth;
 }
