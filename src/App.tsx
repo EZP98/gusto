@@ -168,7 +168,7 @@ export default function App() {
   // i18n hook
   const { language, setLanguage, t, languageNames, availableLanguages } = useI18nStandalone();
 
-  // Conversations hook with localStorage persistence + cloud sync
+  // Conversations hook - cloud DB only (requires auth)
   const {
     conversations,
     activeId,
@@ -180,27 +180,16 @@ export default function App() {
     updateMessageContent,
     finalizeMessage,
     getHistoryForApi,
-    syncToCloud,
-    loadFromCloud,
     saveConversationToCloud,
-  } = useConversations();
+  } = useConversations(token);
 
-  // Wrap login to load conversations from cloud after success
+  // Simple login/register handlers (conversations auto-load via hook)
   const handleLogin = async (email: string, password: string) => {
-    const result = await login(email, password);
-    if (result.success) {
-      await loadFromCloud();
-    }
-    return result;
+    return await login(email, password);
   };
 
-  // Wrap register to sync local conversations to cloud after success
   const handleRegister = async (email: string, password: string, name?: string) => {
-    const result = await register(email, password, name);
-    if (result.success) {
-      await syncToCloud();
-    }
-    return result;
+    return await register(email, password, name);
   };
   const [shoppingList, setShoppingList] = useState<ShoppingItem[]>([
     { text: 'comprare uova', checked: true },
@@ -336,7 +325,7 @@ export default function App() {
     // Create new conversation if none active
     let convId = activeId;
     if (!convId) {
-      convId = createConversation();
+      convId = await createConversation();
     }
 
     // Always navigate to chat screen when sending a message
@@ -462,8 +451,8 @@ export default function App() {
   };
 
   // Start new conversation
-  const handleNewConversation = () => {
-    createConversation();
+  const handleNewConversation = async () => {
+    await createConversation();
     setScreen('chat');
   };
 
@@ -1090,8 +1079,8 @@ export default function App() {
               <div style={{ padding: '20px 0' }}>
                 {/* New Chat Button */}
                 <button
-                  onClick={() => {
-                    createConversation();
+                  onClick={async () => {
+                    await createConversation();
                   }}
                   style={{
                     width: '100%',

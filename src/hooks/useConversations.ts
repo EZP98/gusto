@@ -1,11 +1,10 @@
-// useConversations Hook - Manages chat conversations with localStorage + cloud sync
+// useConversations Hook - Manages chat conversations with cloud DB only (no localStorage)
 
 import { useState, useEffect, useCallback } from 'react';
 import type { Conversation, Message } from '../types/chat';
-import { STORAGE_KEYS } from '../types/chat';
 import { parseRecipeFromText } from '../utils/recipeParser';
 import { generateQuickReplies } from '../utils/quickReplies';
-import { getAuthToken, authFetch } from './useAuth';
+import { authFetch } from './useAuth';
 
 function generateId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -17,62 +16,45 @@ function generateTitle(firstMessage: string): string {
   return `${clean}${firstMessage.length > 30 ? '...' : ''}`;
 }
 
-export function useConversations() {
+export function useConversations(token: string | null) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // Load from localStorage on mount
+  // Load from cloud on mount when authenticated
   useEffect(() => {
-    try {
-      const savedConversations = localStorage.getItem(STORAGE_KEYS.conversations);
-      const savedActiveId = localStorage.getItem(STORAGE_KEYS.activeConversationId);
-
-      if (savedConversations) {
-        const parsed = JSON.parse(savedConversations) as Conversation[];
-        setConversations(parsed);
-      }
-
-      if (savedActiveId) {
-        setActiveId(savedActiveId);
-      }
-    } catch (e) {
-      console.error('Error loading conversations from localStorage:', e);
+    if (!token) {
+      // Not authenticated - clear conversations
+      setConversations([]);
+      setActiveId(null);
+      setIsLoaded(true);
+      return;
     }
-    setIsLoaded(true);
-  }, []);
 
-  // Save to localStorage when conversations change
-  useEffect(() => {
-    if (!isLoaded) return;
-
-    try {
-      localStorage.setItem(STORAGE_KEYS.conversations, JSON.stringify(conversations));
-    } catch (e) {
-      console.error('Error saving conversations to localStorage:', e);
-    }
-  }, [conversations, isLoaded]);
-
-  // Save active ID when it changes
-  useEffect(() => {
-    if (!isLoaded) return;
-
-    try {
-      if (activeId) {
-        localStorage.setItem(STORAGE_KEYS.activeConversationId, activeId);
-      } else {
-        localStorage.removeItem(STORAGE_KEYS.activeConversationId);
+    // Load from cloud
+    const loadConversations = async () => {
+      try {
+        const response = await authFetch('/api/conversations');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.conversations && Array.isArray(data.conversations)) {
+            setConversations(data.conversations);
+          }
+        }
+      } catch (e) {
+        console.error('Error loading conversations:', e);
       }
-    } catch (e) {
-      console.error('Error saving active conversation ID:', e);
-    }
-  }, [activeId, isLoaded]);
+      setIsLoaded(true);
+    };
+
+    loadConversations();
+  }, [token]);
 
   // Get active conversation
   const activeConversation = conversations.find(c => c.id === activeId) || null;
 
-  // Create a new conversation
-  const createConversation = useCallback((): string => {
+  // Create a new conversation (also saves to cloud)
+  const createConversation = useCallback(async (): Promise<string> => {
     const newConversation: Conversation = {
       id: generateId(),
       title: 'Nuova chat',
@@ -84,17 +66,44 @@ export function useConversations() {
     setConversations(prev => [newConversation, ...prev]);
     setActiveId(newConversation.id);
 
-    return newConversation.id;
-  }, []);
+    // Save to cloud if authenticated
+    if (token) {
+      try {
+        await authFetch('/api/conversations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: newConversation.id,
+            title: newConversation.title,
+          }),
+        });
+      } catch (e) {
+        console.error('Error creating conversation on cloud:', e);
+      }
+    }
 
-  // Delete a conversation
-  const deleteConversation = useCallback((id: string) => {
+    return newConversation.id;
+  }, [token]);
+
+  // Delete a conversation (also deletes from cloud)
+  const deleteConversation = useCallback(async (id: string) => {
     setConversations(prev => prev.filter(c => c.id !== id));
 
     if (activeId === id) {
       setActiveId(null);
     }
-  }, [activeId]);
+
+    // Delete from cloud if authenticated
+    if (token) {
+      try {
+        await authFetch(`/api/conversations/${id}`, {
+          method: 'DELETE',
+        });
+      } catch (e) {
+        console.error('Error deleting conversation from cloud:', e);
+      }
+    }
+  }, [activeId, token]);
 
   // Set active conversation
   const setActiveConversation = useCallback((id: string | null) => {
@@ -215,112 +224,42 @@ export function useConversations() {
     setActiveId(null);
   }, []);
 
-  // Sync local conversations to cloud (call after registration)
-  const syncToCloud = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
-    const token = getAuthToken();
-    if (!token || conversations.length === 0) {
-      return { success: true }; // Nothing to sync
-    }
-
-    try {
-      const response = await authFetch('/api/conversations/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversations }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        return { success: false, error: data.error || 'Errore sync' };
-      }
-
-      return { success: true };
-    } catch {
-      return { success: false, error: 'Errore di connessione' };
-    }
-  }, [conversations]);
-
-  // Load conversations from cloud (call after login)
-  const loadFromCloud = useCallback(async (): Promise<{ success: boolean; error?: string }> => {
-    const token = getAuthToken();
-    if (!token) {
-      return { success: false, error: 'Non autenticato' };
-    }
-
-    try {
-      const response = await authFetch('/api/conversations');
-
-      if (!response.ok) {
-        const data = await response.json();
-        return { success: false, error: data.error || 'Errore caricamento' };
-      }
-
-      const data = await response.json();
-
-      if (data.conversations && Array.isArray(data.conversations)) {
-        // Merge cloud conversations with local ones
-        setConversations(prev => {
-          const localIds = new Set(prev.map(c => c.id));
-          const cloudConversations = data.conversations.filter(
-            (c: Conversation) => !localIds.has(c.id)
-          );
-          // Cloud first (most recent), then local
-          return [...cloudConversations, ...prev].sort(
-            (a, b) => b.updatedAt - a.updatedAt
-          );
-        });
-      }
-
-      return { success: true };
-    } catch {
-      return { success: false, error: 'Errore di connessione' };
-    }
-  }, []);
-
   // Save conversation to cloud (call after adding messages when authenticated)
   const saveConversationToCloud = useCallback(async (conversationId: string) => {
-    const token = getAuthToken();
     if (!token) return;
 
     const conv = conversations.find(c => c.id === conversationId);
-    if (!conv) return;
+    if (!conv || conv.messages.length === 0) return;
 
     try {
-      // Check if conversation exists on cloud
-      const checkResponse = await authFetch(`/api/conversations/${conversationId}`);
-
-      if (checkResponse.status === 404) {
-        // Create new conversation
-        await authFetch('/api/conversations', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            id: conv.id,
-            title: conv.title,
-          }),
-        });
-      }
-
-      // Sync messages - get last message and add it
-      if (conv.messages.length > 0) {
-        const lastMsg = conv.messages[conv.messages.length - 1];
+      // Save all messages (the API should handle duplicates)
+      for (const msg of conv.messages) {
         await authFetch(`/api/conversations/${conversationId}/messages`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            id: lastMsg.id,
-            role: lastMsg.role,
-            content: lastMsg.content,
-            timestamp: lastMsg.timestamp,
-            parsedRecipe: lastMsg.parsedRecipe,
-            quickReplies: lastMsg.quickReplies,
+            id: msg.id,
+            role: msg.role,
+            content: msg.content,
+            timestamp: msg.timestamp,
+            parsedRecipe: msg.parsedRecipe,
+            quickReplies: msg.quickReplies,
           }),
+        });
+      }
+
+      // Update title if changed
+      if (conv.title !== 'Nuova chat') {
+        await authFetch(`/api/conversations/${conversationId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: conv.title }),
         });
       }
     } catch (e) {
       console.error('Error saving to cloud:', e);
     }
-  }, [conversations]);
+  }, [conversations, token]);
 
   return {
     conversations,
@@ -336,9 +275,6 @@ export function useConversations() {
     finalizeMessage,
     getHistoryForApi,
     clearAll,
-    // Cloud sync functions
-    syncToCloud,
-    loadFromCloud,
     saveConversationToCloud,
   };
 }
