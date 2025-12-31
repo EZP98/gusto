@@ -1,108 +1,189 @@
-// DELETE/PATCH /api/recipes/[id] - Delete or update a recipe
-
-import { getUserFromRequest } from '../../lib/auth';
+// Recipes API - Single recipe operations
 
 interface Env {
   DB: D1Database;
   JWT_SECRET: string;
 }
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'DELETE, PATCH, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-};
+interface JWTPayload {
+  sub: string;
+  email: string;
+  iat: number;
+  exp: number;
+}
 
-// DELETE - Remove a recipe
-export const onRequestDelete: PagesFunction<Env> = async (context) => {
-  const { request, env, params } = context;
-  const recipeId = params.id as string;
+interface Recipe {
+  id: string;
+  user_id: string;
+  name: string;
+  time: string | null;
+  servings: string | null;
+  ingredients: string;
+  steps: string;
+  note: string | null;
+  is_favorite: number;
+  created_at: number;
+}
+
+async function verifyJWT(token: string, secret: string): Promise<JWTPayload | null> {
+  try {
+    const [headerB64, payloadB64, signatureB64] = token.split('.');
+    if (!headerB64 || !payloadB64 || !signatureB64) return null;
+
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify']
+    );
+
+    const signatureValid = await crypto.subtle.verify(
+      'HMAC',
+      key,
+      Uint8Array.from(atob(signatureB64.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
+      encoder.encode(`${headerB64}.${payloadB64}`)
+    );
+
+    if (!signatureValid) return null;
+
+    const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/'))) as JWTPayload;
+
+    if (payload.exp && payload.exp < Date.now()) return null;
+
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+// GET /api/recipes/:id - Get single recipe
+export const onRequestGet: PagesFunction<Env> = async (context) => {
+  const authHeader = context.request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const token = authHeader.slice(7);
+  const payload = await verifyJWT(token, context.env.JWT_SECRET);
+  if (!payload) {
+    return Response.json({ error: 'Invalid token' }, { status: 401 });
+  }
+
+  const recipeId = context.params.id as string;
 
   try {
-    const payload = await getUserFromRequest(request, env.JWT_SECRET);
-    if (!payload) {
-      return new Response(JSON.stringify({ error: 'Non autorizzato' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      });
+    const recipe = await context.env.DB.prepare(
+      'SELECT * FROM recipes WHERE id = ? AND user_id = ?'
+    ).bind(recipeId, payload.sub).first<Recipe>();
+
+    if (!recipe) {
+      return Response.json({ error: 'Recipe not found' }, { status: 404 });
     }
 
-    // Check ownership before deleting
-    const existing = await env.DB.prepare(
-      'SELECT id FROM saved_recipes WHERE id = ? AND user_id = ?'
-    ).bind(recipeId, payload.sub).first();
+    return Response.json({
+      recipe: {
+        id: recipe.id,
+        name: recipe.name,
+        time: recipe.time,
+        servings: recipe.servings,
+        ingredients: JSON.parse(recipe.ingredients),
+        steps: JSON.parse(recipe.steps),
+        note: recipe.note,
+        isFavorite: recipe.is_favorite === 1,
+        createdAt: recipe.created_at,
+      }
+    });
+  } catch (e) {
+    console.error('Error fetching recipe:', e);
+    return Response.json({ error: 'Database error' }, { status: 500 });
+  }
+};
 
-    if (!existing) {
-      return new Response(JSON.stringify({ error: 'Ricetta non trovata' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      });
-    }
+// DELETE /api/recipes/:id - Delete recipe
+export const onRequestDelete: PagesFunction<Env> = async (context) => {
+  const authHeader = context.request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
-    await env.DB.prepare(
-      'DELETE FROM saved_recipes WHERE id = ? AND user_id = ?'
+  const token = authHeader.slice(7);
+  const payload = await verifyJWT(token, context.env.JWT_SECRET);
+  if (!payload) {
+    return Response.json({ error: 'Invalid token' }, { status: 401 });
+  }
+
+  const recipeId = context.params.id as string;
+
+  try {
+    const result = await context.env.DB.prepare(
+      'DELETE FROM recipes WHERE id = ? AND user_id = ?'
     ).bind(recipeId, payload.sub).run();
 
-    return new Response(JSON.stringify({ success: true }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
+    if (result.meta.changes === 0) {
+      return Response.json({ error: 'Recipe not found' }, { status: 404 });
+    }
 
-  } catch (error) {
-    console.error('Delete recipe error:', error);
-    return new Response(JSON.stringify({ error: 'Errore nella cancellazione' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
+    return Response.json({ success: true });
+  } catch (e) {
+    console.error('Error deleting recipe:', e);
+    return Response.json({ error: 'Database error' }, { status: 500 });
   }
 };
 
-// PATCH - Toggle favorite status
+// PATCH /api/recipes/:id - Update recipe (toggle favorite, update note)
 export const onRequestPatch: PagesFunction<Env> = async (context) => {
-  const { request, env, params } = context;
-  const recipeId = params.id as string;
+  const authHeader = context.request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const token = authHeader.slice(7);
+  const payload = await verifyJWT(token, context.env.JWT_SECRET);
+  if (!payload) {
+    return Response.json({ error: 'Invalid token' }, { status: 401 });
+  }
+
+  const recipeId = context.params.id as string;
 
   try {
-    const payload = await getUserFromRequest(request, env.JWT_SECRET);
-    if (!payload) {
-      return new Response(JSON.stringify({ error: 'Non autorizzato' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      });
+    const body = await context.request.json() as {
+      isFavorite?: boolean;
+      note?: string;
+    };
+
+    // Build dynamic update query
+    const updates: string[] = [];
+    const values: (string | number)[] = [];
+
+    if (body.isFavorite !== undefined) {
+      updates.push('is_favorite = ?');
+      values.push(body.isFavorite ? 1 : 0);
     }
 
-    const { isFavorite } = await request.json() as { isFavorite: boolean };
-
-    // Check ownership before updating
-    const existing = await env.DB.prepare(
-      'SELECT id FROM saved_recipes WHERE id = ? AND user_id = ?'
-    ).bind(recipeId, payload.sub).first();
-
-    if (!existing) {
-      return new Response(JSON.stringify({ error: 'Ricetta non trovata' }), {
-        status: 404,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      });
+    if (body.note !== undefined) {
+      updates.push('note = ?');
+      values.push(body.note);
     }
 
-    await env.DB.prepare(
-      'UPDATE saved_recipes SET is_favorite = ? WHERE id = ? AND user_id = ?'
-    ).bind(isFavorite ? 1 : 0, recipeId, payload.sub).run();
+    if (updates.length === 0) {
+      return Response.json({ error: 'No fields to update' }, { status: 400 });
+    }
 
-    return new Response(JSON.stringify({ success: true, isFavorite }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
+    values.push(recipeId, payload.sub);
 
-  } catch (error) {
-    console.error('Update recipe error:', error);
-    return new Response(JSON.stringify({ error: 'Errore nell\'aggiornamento' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
+    const result = await context.env.DB.prepare(
+      `UPDATE recipes SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`
+    ).bind(...values).run();
+
+    if (result.meta.changes === 0) {
+      return Response.json({ error: 'Recipe not found' }, { status: 404 });
+    }
+
+    return Response.json({ success: true });
+  } catch (e) {
+    console.error('Error updating recipe:', e);
+    return Response.json({ error: 'Database error' }, { status: 500 });
   }
-};
-
-export const onRequestOptions: PagesFunction = async () => {
-  return new Response(null, { headers: corsHeaders });
 };

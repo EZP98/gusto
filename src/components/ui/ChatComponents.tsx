@@ -25,6 +25,15 @@ export const tokens = {
   },
 };
 
+// Helper per rimuovere markdown dal testo
+const stripMarkdown = (text: string): string => {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '$1')  // **bold** → bold
+    .replace(/\*(.*?)\*/g, '$1')       // *italic* → italic
+    .replace(/__(.*?)__/g, '$1')       // __bold__ → bold
+    .replace(/_(.*?)_/g, '$1');        // _italic_ → italic
+};
+
 // ============================================
 // 🖼️ DECORAZIONI
 // ============================================
@@ -746,7 +755,7 @@ export const RecipeStep: React.FC<RecipeStepProps> = ({ number, text, tip }) => 
         margin: 0,
         lineHeight: 1.5,
       }}>
-        {text}
+        {stripMarkdown(text)}
       </p>
 
       {/* Tip opzionale per questo step */}
@@ -887,6 +896,7 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
 
 interface RecipeInChatProps extends Omit<RecipeDetailProps, 'checkedIngredients' | 'onIngredientToggle'> {
   onSave?: () => void;
+  onShare?: () => void;
   isSaved?: boolean;
   isSaving?: boolean;
 }
@@ -895,10 +905,11 @@ interface RecipeInChatProps extends Omit<RecipeDetailProps, 'checkedIngredients'
  * Ricetta inline nella chat (versione espansa)
  * Mostra ricetta completa dentro la conversazione
  * Senza cornice pesante - solo separatori leggeri
- * Include bottone per salvare nel ricettario
+ * Include bottone per salvare nel ricettario e condividere
  */
 export const RecipeInChat: React.FC<RecipeInChatProps> = ({
   onSave,
+  onShare,
   isSaved = false,
   isSaving = false,
   ...props
@@ -910,58 +921,88 @@ export const RecipeInChat: React.FC<RecipeInChatProps> = ({
   }}>
     <RecipeDetail {...props} />
 
-    {/* Save to cookbook button */}
-    {onSave && (
-      <button
-        onClick={onSave}
-        disabled={isSaved || isSaving}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 8,
-          width: '100%',
-          marginTop: 16,
-          padding: '10px 16px',
-          background: isSaved ? '#F0EBE3' : 'transparent',
-          color: isSaved ? '#8B857C' : '#2D2A26',
-          border: isSaved ? 'none' : '1.5px dashed #C4C0B9',
-          borderRadius: 8,
-          fontFamily: "'Caveat', cursive",
-          fontSize: 17,
-          cursor: isSaved || isSaving ? 'default' : 'pointer',
-          transition: 'all 0.15s',
-        }}
-      >
-        {isSaving ? (
-          <>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ animation: 'spin 1s linear infinite' }}>
-              <circle cx="8" cy="8" r="6" stroke="#8B857C" strokeWidth="2" strokeDasharray="20 10" />
-            </svg>
-            Salvo...
-          </>
-        ) : isSaved ? (
-          <>
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-              <path d="M3 8L6 11L13 4" stroke="#8B857C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            Salvata nel ricettario
-          </>
-        ) : (
-          <>
-            <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
-              <path
-                d="M10 17 Q4 12 4 8 Q4 4 7 4 Q9 4 10 6 Q11 4 13 4 Q16 4 16 8 Q16 12 10 17"
-                stroke="#2D2A26"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-              />
-            </svg>
-            Salva nel ricettario
-          </>
-        )}
-      </button>
-    )}
+    {/* Action buttons */}
+    <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+      {/* Save to cookbook button */}
+      {onSave && (
+        <button
+          onClick={onSave}
+          disabled={isSaved || isSaving}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            flex: 1,
+            padding: '10px 16px',
+            background: isSaved ? '#F0EBE3' : 'transparent',
+            color: isSaved ? '#8B857C' : '#2D2A26',
+            border: isSaved ? 'none' : '1.5px dashed #C4C0B9',
+            borderRadius: 8,
+            fontFamily: "'Caveat', cursive",
+            fontSize: 17,
+            cursor: isSaved || isSaving ? 'default' : 'pointer',
+            transition: 'all 0.15s',
+          }}
+        >
+          {isSaving ? (
+            <>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ animation: 'spin 1s linear infinite' }}>
+                <circle cx="8" cy="8" r="6" stroke="#8B857C" strokeWidth="2" strokeDasharray="20 10" />
+              </svg>
+              Salvo...
+            </>
+          ) : isSaved ? (
+            <>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M3 8L6 11L13 4" stroke="#8B857C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              Salvata
+            </>
+          ) : (
+            <>
+              <svg width="16" height="16" viewBox="0 0 20 20" fill="none">
+                <path
+                  d="M10 17 Q4 12 4 8 Q4 4 7 4 Q9 4 10 6 Q11 4 13 4 Q16 4 16 8 Q16 12 10 17"
+                  stroke="#2D2A26"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+              </svg>
+              Salva
+            </>
+          )}
+        </button>
+      )}
+
+      {/* Share button */}
+      {onShare && (
+        <button
+          onClick={onShare}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            flex: 1,
+            padding: '10px 16px',
+            background: 'transparent',
+            color: '#2D2A26',
+            border: '1.5px dashed #C4C0B9',
+            borderRadius: 8,
+            fontFamily: "'Caveat', cursive",
+            fontSize: 17,
+            cursor: 'pointer',
+            transition: 'all 0.15s',
+          }}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2D2A26" strokeWidth="1.5">
+            <path d="M18 8C19.6569 8 21 6.65685 21 5C21 3.34315 19.6569 2 18 2C16.3431 2 15 3.34315 15 5C15 5.12548 15.0077 5.24917 15.0227 5.37061L8.08261 9.19071C7.54305 8.46589 6.6892 8 5.72727 8C4.22104 8 3 9.34315 3 11C3 12.6569 4.22104 14 5.72727 14C6.6892 14 7.54305 13.5341 8.08261 12.8093L15.0227 16.6294C15.0077 16.7508 15 16.8745 15 17C15 18.6569 16.3431 20 18 20C19.6569 20 21 18.6569 21 17C21 15.3431 19.6569 14 18 14C17.0381 14 16.1842 14.4659 15.6446 15.1907L8.70455 11.3706C8.71951 11.2492 8.72727 11.1255 8.72727 11C8.72727 10.8745 8.71951 10.7508 8.70455 10.6294L15.6446 6.80929C16.1842 7.53411 17.0381 8 18 8Z" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Condividi
+        </button>
+      )}
+    </div>
   </div>
 );
 

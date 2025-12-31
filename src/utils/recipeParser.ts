@@ -109,23 +109,36 @@ function extractTips(text: string): string[] {
  * Main function: Parse a recipe from AI response text
  */
 export function parseRecipeFromText(text: string): ParsedRecipe | null {
-  // Look for ingredients section
+  // Look for ingredients section (all supported languages)
   const ingredients = extractSection(text, [
+    // Italian
     'ingredienti',
+    // English
     'ingredients',
-    'cosa serve',
-    'occorrente'
+    // French
+    'ingrédients',
+    // Spanish
+    'ingredientes',
+    // Japanese
+    '材料',
+    // Chinese
+    '食材',
   ]);
 
-  // Look for steps section
+  // Look for steps section (all supported languages)
   const steps = extractSection(text, [
-    'procedimento',
+    // Italian
     'preparazione',
+    // English
     'steps',
-    'instructions',
-    'istruzioni',
-    'come fare',
-    'come preparare'
+    // French
+    'préparation',
+    // Spanish
+    'preparación',
+    // Japanese
+    '作り方',
+    // Chinese
+    '步驟',
   ]);
 
   // Must have both ingredients and steps to be a recipe
@@ -148,11 +161,26 @@ export function parseRecipeFromText(text: string): ParsedRecipe | null {
  */
 export function containsRecipe(text: string): boolean {
   const lowerText = text.toLowerCase();
-  return (
-    (lowerText.includes('ingredienti') || lowerText.includes('ingredients')) &&
-    (lowerText.includes('procedimento') || lowerText.includes('preparazione') ||
-     lowerText.includes('steps') || lowerText.includes('istruzioni'))
-  );
+
+  // Check for ingredients in any language
+  const hasIngredients =
+    lowerText.includes('ingredienti') ||
+    lowerText.includes('ingredients') ||
+    lowerText.includes('ingrédients') ||
+    lowerText.includes('ingredientes') ||
+    text.includes('材料') ||
+    text.includes('食材');
+
+  // Check for steps in any language
+  const hasSteps =
+    lowerText.includes('preparazione') ||
+    lowerText.includes('steps') ||
+    lowerText.includes('préparation') ||
+    lowerText.includes('preparación') ||
+    text.includes('作り方') ||
+    text.includes('步驟');
+
+  return hasIngredients && hasSteps;
 }
 
 /**
@@ -166,11 +194,15 @@ export function extractIntroText(text: string): string {
   for (const line of lines) {
     const lowerLine = line.toLowerCase().trim();
 
-    // Stop when we hit the recipe title or ingredients
+    // Stop when we hit ingredients header in any language
     if (
       lowerLine.match(/^#+\s*\*?\*?[A-Z]/) || // Markdown heading with caps (recipe title)
       lowerLine.includes('ingredienti') ||
       lowerLine.includes('ingredients') ||
+      lowerLine.includes('ingrédients') ||
+      lowerLine.includes('ingredientes') ||
+      line.includes('材料') ||
+      line.includes('食材') ||
       lowerLine.match(/^\*\*[A-Z]{3,}/) // Bold all-caps title
     ) {
       break;

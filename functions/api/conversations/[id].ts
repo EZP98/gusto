@@ -26,7 +26,7 @@ interface MessageRow {
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, DELETE, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, DELETE, PATCH, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
@@ -145,6 +145,61 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
   } catch (error) {
     console.error('Delete conversation error:', error);
     return new Response(JSON.stringify({ error: 'Errore nella cancellazione della conversazione' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    });
+  }
+};
+
+// PATCH - Update conversation (title)
+export const onRequestPatch: PagesFunction<Env> = async (context) => {
+  const { request, env, params } = context;
+  const conversationId = params.id as string;
+
+  try {
+    const payload = await getUserFromRequest(request, env.JWT_SECRET);
+    if (!payload) {
+      return new Response(JSON.stringify({ error: 'Non autorizzato' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
+    }
+
+    // Check ownership
+    const conversation = await env.DB.prepare(
+      'SELECT user_id FROM conversations WHERE id = ?'
+    ).bind(conversationId).first<{ user_id: string }>();
+
+    if (!conversation) {
+      return new Response(JSON.stringify({ error: 'Conversazione non trovata' }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
+    }
+
+    if (conversation.user_id !== payload.sub) {
+      return new Response(JSON.stringify({ error: 'Non autorizzato' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
+    }
+
+    const body = await request.json() as { title?: string };
+
+    if (body.title) {
+      await env.DB.prepare(
+        'UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?'
+      ).bind(body.title, Date.now(), conversationId).run();
+    }
+
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    });
+
+  } catch (error) {
+    console.error('Update conversation error:', error);
+    return new Response(JSON.stringify({ error: 'Errore nell\'aggiornamento della conversazione' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json', ...corsHeaders },
     });

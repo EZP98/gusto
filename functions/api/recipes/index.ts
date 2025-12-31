@@ -1,146 +1,164 @@
-// GET/POST /api/recipes - List and save recipes
-
-import { getUserFromRequest, generateId } from '../../lib/auth';
+// Recipes API - List and Create
 
 interface Env {
   DB: D1Database;
   JWT_SECRET: string;
 }
 
-interface RecipeRow {
+interface JWTPayload {
+  sub: string;
+  email: string;
+  iat: number;
+  exp: number;
+}
+
+interface Recipe {
   id: string;
+  user_id: string;
   name: string;
   time: string | null;
   servings: string | null;
-  ingredients: string | null;
-  steps: string | null;
+  ingredients: string;
+  steps: string;
   note: string | null;
   is_favorite: number;
   created_at: number;
 }
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-};
+async function verifyJWT(token: string, secret: string): Promise<JWTPayload | null> {
+  try {
+    const [headerB64, payloadB64, signatureB64] = token.split('.');
+    if (!headerB64 || !payloadB64 || !signatureB64) return null;
 
-// GET - List all saved recipes for user
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      'raw',
+      encoder.encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['verify']
+    );
+
+    const signatureValid = await crypto.subtle.verify(
+      'HMAC',
+      key,
+      Uint8Array.from(atob(signatureB64.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
+      encoder.encode(`${headerB64}.${payloadB64}`)
+    );
+
+    if (!signatureValid) return null;
+
+    const payload = JSON.parse(atob(payloadB64.replace(/-/g, '+').replace(/_/g, '/'))) as JWTPayload;
+
+    if (payload.exp && payload.exp < Date.now()) return null;
+
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+// GET /api/recipes - List all recipes for user
 export const onRequestGet: PagesFunction<Env> = async (context) => {
-  const { request, env } = context;
+  const authHeader = context.request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const token = authHeader.slice(7);
+  const payload = await verifyJWT(token, context.env.JWT_SECRET);
+  if (!payload) {
+    return Response.json({ error: 'Invalid token' }, { status: 401 });
+  }
 
   try {
-    const payload = await getUserFromRequest(request, env.JWT_SECRET);
-    if (!payload) {
-      return new Response(JSON.stringify({ error: 'Non autorizzato' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      });
-    }
+    const results = await context.env.DB.prepare(
+      'SELECT * FROM recipes WHERE user_id = ? ORDER BY created_at DESC'
+    ).bind(payload.sub).all<Recipe>();
 
-    const recipes = await env.DB.prepare(
-      'SELECT id, name, time, servings, ingredients, steps, note, is_favorite, created_at FROM saved_recipes WHERE user_id = ? ORDER BY created_at DESC'
-    ).bind(payload.sub).all<RecipeRow>();
+    const recipes = results.results.map(r => ({
+      id: r.id,
+      name: r.name,
+      time: r.time,
+      servings: r.servings,
+      ingredients: JSON.parse(r.ingredients),
+      steps: JSON.parse(r.steps),
+      note: r.note,
+      isFavorite: r.is_favorite === 1,
+      createdAt: r.created_at,
+    }));
 
-    return new Response(JSON.stringify({
-      recipes: recipes.results.map(r => ({
-        id: r.id,
-        name: r.name,
-        time: r.time,
-        servings: r.servings,
-        ingredients: r.ingredients ? JSON.parse(r.ingredients) : [],
-        steps: r.steps ? JSON.parse(r.steps) : [],
-        note: r.note,
-        isFavorite: r.is_favorite === 1,
-        createdAt: r.created_at,
-      })),
-    }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
-
-  } catch (error) {
-    console.error('List recipes error:', error);
-    return new Response(JSON.stringify({ error: 'Errore nel recupero delle ricette' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
+    return Response.json({ recipes });
+  } catch (e) {
+    console.error('Error fetching recipes:', e);
+    return Response.json({ error: 'Database error' }, { status: 500 });
   }
 };
 
-// POST - Save a new recipe
+// POST /api/recipes - Create a new recipe
 export const onRequestPost: PagesFunction<Env> = async (context) => {
-  const { request, env } = context;
+  const authHeader = context.request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const token = authHeader.slice(7);
+  const payload = await verifyJWT(token, context.env.JWT_SECRET);
+  if (!payload) {
+    return Response.json({ error: 'Invalid token' }, { status: 401 });
+  }
 
   try {
-    const payload = await getUserFromRequest(request, env.JWT_SECRET);
-    if (!payload) {
-      return new Response(JSON.stringify({ error: 'Non autorizzato' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      });
-    }
-
-    const { name, time, servings, ingredients, steps, note } = await request.json() as {
+    const body = await context.request.json() as {
       name: string;
       time?: string;
       servings?: string;
-      ingredients?: string[];
-      steps?: string[];
+      ingredients: string[];
+      steps: string[];
       note?: string;
     };
 
-    if (!name) {
-      return new Response(JSON.stringify({ error: 'Nome ricetta richiesto' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      });
+    if (!body.name || !body.ingredients || !body.steps) {
+      return Response.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const recipeId = generateId();
+    const id = generateId();
     const now = Date.now();
 
-    await env.DB.prepare(
-      'INSERT INTO saved_recipes (id, user_id, name, time, servings, ingredients, steps, note, is_favorite, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    ).bind(
-      recipeId,
+    await context.env.DB.prepare(`
+      INSERT INTO recipes (id, user_id, name, time, servings, ingredients, steps, note, is_favorite, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+    `).bind(
+      id,
       payload.sub,
-      name,
-      time || null,
-      servings || null,
-      ingredients ? JSON.stringify(ingredients) : null,
-      steps ? JSON.stringify(steps) : null,
-      note || null,
-      0,
+      body.name,
+      body.time || null,
+      body.servings || null,
+      JSON.stringify(body.ingredients),
+      JSON.stringify(body.steps),
+      body.note || null,
       now
     ).run();
 
-    return new Response(JSON.stringify({
-      recipe: {
-        id: recipeId,
-        name,
-        time,
-        servings,
-        ingredients: ingredients || [],
-        steps: steps || [],
-        note,
-        isFavorite: false,
-        createdAt: now,
-      },
-    }), {
-      status: 201,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
+    const recipe = {
+      id,
+      name: body.name,
+      time: body.time || null,
+      servings: body.servings || null,
+      ingredients: body.ingredients,
+      steps: body.steps,
+      note: body.note || null,
+      isFavorite: false,
+      createdAt: now,
+    };
 
-  } catch (error) {
-    console.error('Save recipe error:', error);
-    return new Response(JSON.stringify({ error: 'Errore nel salvataggio della ricetta' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
+    return Response.json({ recipe }, { status: 201 });
+  } catch (e) {
+    console.error('Error creating recipe:', e);
+    return Response.json({ error: 'Database error' }, { status: 500 });
   }
-};
-
-export const onRequestOptions: PagesFunction = async () => {
-  return new Response(null, { headers: corsHeaders });
 };

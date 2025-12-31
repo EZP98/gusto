@@ -275,6 +275,14 @@ CRITICAL FORMATTING:
 - Use **bold** only for section headers
 - Keep paragraphs short and readable
 - NO emoji - the UI has a hand-drawn style
+
+RECIPE DISPLAY (MANDATORY):
+When you want to show a complete recipe with ingredients and steps, you MUST use the display_recipe tool.
+This tool will render the recipe beautifully in the app's UI.
+
+DO NOT write recipes as plain text with markdown. ALWAYS use the display_recipe tool instead.
+
+You can still write introductory text, history, and tips as regular text before or after calling the tool.
 </formatting_rules>
 
 <response_style>
@@ -366,6 +374,47 @@ ALL recipe suggestions and menus MUST comply with this diet. If the user asks fo
 ${ragContext}
 ${perplexityContext}`;
 
+    // Define the recipe tool
+    const tools = [
+      {
+        name: 'display_recipe',
+        description: 'Display a recipe to the user with structured data. Use this tool whenever you want to show a complete recipe with ingredients and steps.',
+        input_schema: {
+          type: 'object',
+          properties: {
+            name: {
+              type: 'string',
+              description: 'The name of the recipe'
+            },
+            time: {
+              type: 'string',
+              description: 'Total preparation/cooking time (e.g., "30 minuti", "1 ora")'
+            },
+            servings: {
+              type: 'string',
+              description: 'Number of servings (e.g., "4 persone", "6 porzioni")'
+            },
+            ingredients: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'List of ingredients with quantities'
+            },
+            steps: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'List of preparation steps in order'
+            },
+            tips: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Optional tips and suggestions'
+            }
+          },
+          required: ['name', 'ingredients', 'steps']
+        }
+      }
+    ];
+
     // Call Anthropic API with streaming enabled
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -379,6 +428,7 @@ ${perplexityContext}`;
         max_tokens: 2000,
         stream: true,
         system: systemPrompt,
+        tools: tools,
         messages: messages,
       }),
     });

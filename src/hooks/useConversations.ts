@@ -182,13 +182,34 @@ export function useConversations(token: string | null) {
   }, [activeId]);
 
   // Finalize message after streaming (parse recipe + quick replies)
+  // If toolRecipe is provided (from tool use), use that instead of parsing from text
   const finalizeMessage = useCallback((
     messageId: string,
     content: string,
-    conversationId?: string
+    conversationId?: string,
+    toolRecipe?: {
+      name: string;
+      time?: string;
+      servings?: string;
+      ingredients: string[];
+      steps: string[];
+      tips?: string[];
+    }
   ) => {
     const targetId = conversationId || activeId;
-    const parsedRecipe = parseRecipeFromText(content) ?? undefined;
+
+    // Use tool recipe if provided, otherwise parse from text
+    const parsedRecipe = toolRecipe
+      ? {
+          name: toolRecipe.name,
+          time: toolRecipe.time,
+          servings: toolRecipe.servings,
+          ingredients: toolRecipe.ingredients,
+          steps: toolRecipe.steps,
+          tips: toolRecipe.tips,
+        }
+      : (parseRecipeFromText(content) ?? undefined);
+
     const quickReplies = generateQuickReplies(content, parsedRecipe || null);
 
     setConversations(prev => prev.map(conv => {
@@ -238,12 +259,14 @@ export function useConversations(token: string | null) {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            id: msg.id,
-            role: msg.role,
-            content: msg.content,
-            timestamp: msg.timestamp,
-            parsedRecipe: msg.parsedRecipe,
-            quickReplies: msg.quickReplies,
+            message: {
+              id: msg.id,
+              role: msg.role,
+              content: msg.content,
+              timestamp: msg.timestamp,
+              parsedRecipe: msg.parsedRecipe,
+              quickReplies: msg.quickReplies,
+            }
           }),
         });
       }

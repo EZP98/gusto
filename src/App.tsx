@@ -30,6 +30,7 @@ import { useI18nStandalone } from './hooks/useI18n';
 import { LanguageSelector } from './components/ui/LanguageSelector';
 import { getInitialQuickReplies } from './utils/quickReplies';
 import { extractIntroText } from './utils/recipeParser';
+import { shareRecipe } from './utils/share';
 import {
   SketchEgg,
   SketchTomato,
@@ -120,9 +121,58 @@ function useIsMobile() {
   return isMobile;
 }
 
+// Hook per hash-based routing
+function useHashRouter() {
+  const [route, setRoute] = useState(() => {
+    const hash = window.location.hash.slice(1) || '/';
+    return hash;
+  });
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.slice(1) || '/';
+      setRoute(hash);
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
+
+  const navigate = (path: string) => {
+    window.location.hash = path;
+  };
+
+  // Parse route to get screen and optional ID
+  const parseRoute = (): { screen: Screen; id?: string } => {
+    const parts = route.split('/').filter(Boolean);
+
+    if (parts.length === 0 || parts[0] === 'home') {
+      return { screen: 'home' };
+    }
+
+    if (parts[0] === 'chat') {
+      return { screen: 'chat', id: parts[1] };
+    }
+
+    if (parts[0] === 'recipes') {
+      return { screen: 'recipes', id: parts[1] };
+    }
+
+    if (parts[0] === 'pantry') {
+      return { screen: 'pantry' };
+    }
+
+    return { screen: 'home' };
+  };
+
+  const { screen, id } = parseRoute();
+
+  return { screen, routeId: id, navigate, route };
+}
+
 export default function App() {
   const isMobile = useIsMobile();
-  const [screen, setScreen] = useState<Screen>('home');
+  const { screen, routeId, navigate } = useHashRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -177,6 +227,25 @@ export default function App() {
     getHistoryForApi,
     saveConversationToCloud,
   } = useConversations(token);
+
+  // Sync URL with active conversation
+  useEffect(() => {
+    if (screen === 'chat' && routeId && routeId !== activeId) {
+      const conv = conversations.find(c => c.id === routeId);
+      if (conv) {
+        setActiveConversation(routeId);
+      }
+    }
+    // If on /chat without ID, clear active conversation
+    if (screen === 'chat' && !routeId && activeId) {
+      setActiveConversation(null);
+    }
+  }, [screen, routeId, conversations, activeId, setActiveConversation]);
+
+  // Select a conversation
+  const selectConversation = (convId: string) => {
+    navigate(`/chat/${convId}`);
+  };
 
   // Simple login/register handlers (conversations auto-load via hook)
   const handleLogin = async (email: string, password: string) => {
@@ -366,8 +435,8 @@ export default function App() {
       convId = await createConversation();
     }
 
-    // Always navigate to chat screen when sending a message
-    setScreen('chat');
+    // Navigate to chat with conversation ID
+    navigate(`/chat/${convId}`);
 
     setMessage('');
     addMessage('user', msgToSend, convId);
@@ -404,6 +473,18 @@ export default function App() {
       let isStreamDone = false;
       let displayLoopRunning = false;
 
+      // Tool use tracking
+      let toolUseJson = '';
+      let isInToolUse = false;
+      let toolRecipe: {
+        name: string;
+        time?: string;
+        servings?: string;
+        ingredients: string[];
+        steps: string[];
+        tips?: string[];
+      } | null = null;
+
       // Smooth display function - keeps running while streaming or has text to show
       const displayLoop = () => {
         if (displayedText.length < fullText.length) {
@@ -435,13 +516,38 @@ export default function App() {
             if (line.startsWith('data: ')) {
               try {
                 const data = JSON.parse(line.slice(6));
-                // Handle Anthropic streaming format
+
+                // Handle text content
                 if (data.type === 'content_block_delta' && data.delta?.text) {
                   fullText += data.delta.text;
                   // Start display loop on first real content
                   if (!displayLoopRunning) {
                     displayLoopRunning = true;
                     displayLoop();
+                  }
+                }
+
+                // Handle tool use start
+                if (data.type === 'content_block_start' && data.content_block?.type === 'tool_use') {
+                  isInToolUse = true;
+                  toolUseJson = '';
+                }
+
+                // Handle tool use input JSON delta
+                if (data.type === 'content_block_delta' && data.delta?.type === 'input_json_delta') {
+                  toolUseJson += data.delta.partial_json || '';
+                }
+
+                // Handle tool use stop - parse the recipe
+                if (data.type === 'content_block_stop' && isInToolUse) {
+                  isInToolUse = false;
+                  try {
+                    const parsed = JSON.parse(toolUseJson);
+                    if (parsed.name && parsed.ingredients && parsed.steps) {
+                      toolRecipe = parsed;
+                    }
+                  } catch (e) {
+                    console.error('Failed to parse tool use JSON:', e);
                   }
                 }
               } catch {
@@ -463,9 +569,9 @@ export default function App() {
         }
       }
 
-      // Finalize message with recipe parsing and quick replies
-      if (fullText) {
-        finalizeMessage(aiMsgId, fullText, convId);
+      // Finalize message - use tool recipe if available, otherwise parse from text
+      if (fullText || toolRecipe) {
+        finalizeMessage(aiMsgId, fullText, convId, toolRecipe || undefined);
       } else {
         // Fallback if no text received
         updateMessageContent(aiMsgId, 'Mi dispiace, non ho ricevuto risposta.', convId);
@@ -490,8 +596,8 @@ export default function App() {
 
   // Start new conversation
   const handleNewConversation = async () => {
-    await createConversation();
-    setScreen('chat');
+    const newId = await createConversation();
+    navigate(`/chat/${newId}`);
   };
 
   const navItems = [
@@ -522,7 +628,7 @@ export default function App() {
         }}>
           <div
             style={{ marginBottom: 24, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10 }}
-            onClick={() => setScreen('home')}
+            onClick={() => navigate('/')}
           >
             <GustoLogo size={32} />
             <div>
@@ -542,10 +648,7 @@ export default function App() {
                   key={conv.id}
                   title={conv.title}
                   isActive={conv.id === activeId && screen === 'chat'}
-                  onClick={() => {
-                    setActiveConversation(conv.id);
-                    setScreen('chat');
-                  }}
+                  onClick={() => selectConversation(conv.id)}
                   onDelete={() => deleteConversation(conv.id)}
                 />
               ))}
@@ -559,7 +662,7 @@ export default function App() {
           {navItems.map(({ id, label, Icon }) => (
             <button
               key={id}
-              onClick={() => setScreen(id)}
+              onClick={() => navigate(`/${id}`)}
               style={{
                 background: screen === id ? '#F0EBE3' : 'transparent',
                 border: 'none',
@@ -579,15 +682,13 @@ export default function App() {
           ))}
 
           <div style={{ marginTop: 'auto', paddingTop: 24, borderTop: '1px solid #E8E4DE' }}>
-            {/* User Section */}
-            <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center' }}>
+            {/* User + Language on same row */}
+            <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12 }}>
               {isAuthenticated && user ? (
                 <UserMenu user={user} onLogout={logout} t={t} />
               ) : (
                 <LoginButton onClick={() => setAuthModalOpen(true)} t={t} />
               )}
-            </div>
-            <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center' }}>
               <LanguageSelector
                 currentLanguage={language}
                 languages={availableLanguages}
@@ -645,7 +746,7 @@ export default function App() {
             {navItems.map(({ id, label, Icon }) => (
               <button
                 key={id}
-                onClick={() => { setScreen(id); setMenuOpen(false); }}
+                onClick={() => { navigate(`/${id}`); setMenuOpen(false); }}
                 style={{
                   background: screen === id ? '#F0EBE3' : 'transparent',
                   border: 'none',
@@ -667,15 +768,13 @@ export default function App() {
 
             <div style={{ marginTop: 'auto', paddingTop: 24 }}>
               <div style={{ borderTop: '1px solid #E8E4DE', paddingTop: 16 }}>
-                {/* User Section */}
-                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center' }}>
+                {/* User + Language on same row */}
+                <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12 }}>
                   {isAuthenticated && user ? (
                     <UserMenu user={user} onLogout={logout} t={t} />
                   ) : (
                     <LoginButton onClick={() => setAuthModalOpen(true)} t={t} />
                   )}
-                </div>
-                <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}>
                   <LanguageSelector
                     currentLanguage={language}
                     languages={availableLanguages}
@@ -708,7 +807,7 @@ export default function App() {
               <>
                 <div
                   style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
-                  onClick={() => setScreen('home')}
+                  onClick={() => navigate('/')}
                 >
                   <GustoLogo size={24} />
                   <ZineText size="lg" style={{ display: 'block' }}>Gusto</ZineText>
@@ -1189,7 +1288,7 @@ export default function App() {
                     {conversations.map((conv) => (
                       <div
                         key={conv.id}
-                        onClick={() => setActiveConversation(conv.id)}
+                        onClick={() => selectConversation(conv.id)}
                         style={{
                           padding: '14px 16px',
                           marginBottom: 8,
@@ -1262,7 +1361,7 @@ export default function App() {
             <div style={{ flex: 1 }}>
               {/* Back button */}
               <button
-                onClick={() => setActiveConversation(null)}
+                onClick={() => { setActiveConversation(null); navigate('/chat'); }}
                 style={{
                   background: 'none',
                   border: 'none',
@@ -1343,6 +1442,13 @@ export default function App() {
                                 });
                                 setSavingRecipeId(null);
                               } : undefined}
+                              onShare={() => shareRecipe({
+                                name: msg.parsedRecipe!.name,
+                                time: msg.parsedRecipe!.time,
+                                servings: msg.parsedRecipe!.servings,
+                                ingredients: msg.parsedRecipe!.ingredients,
+                                steps: msg.parsedRecipe!.steps,
+                              })}
                               isSaved={isRecipeSaved(msg.parsedRecipe.name)}
                               isSaving={savingRecipeId === msg.id}
                             />
@@ -1374,6 +1480,182 @@ export default function App() {
         {/* ============ RICETTE ============ */}
         {screen === 'recipes' && (
           <div style={{ maxWidth: 600, margin: '0 auto' }}>
+            {/* Recipe Detail View */}
+            {routeId && (() => {
+              const recipe = savedRecipes.find(r => r.id === routeId);
+              if (!recipe) return null;
+              return (
+                <div>
+                  {/* Back button */}
+                  <button
+                    onClick={() => navigate('/recipes')}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: '8px 0',
+                      marginBottom: 16,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      fontFamily: tokens.fonts.hand,
+                      fontSize: 15,
+                      color: tokens.colors.inkLight,
+                    }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path d="M10 4L6 8L10 12" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    {t('recipes.all')}
+                  </button>
+
+                  {/* Recipe Title */}
+                  <ZineText size="xl" style={{ display: 'block', marginBottom: 8 }}>
+                    {recipe.name}
+                  </ZineText>
+                  <Underline width={200} />
+
+                  {/* Time and servings */}
+                  <div style={{ display: 'flex', gap: 20, marginTop: 16, marginBottom: 24 }}>
+                    {recipe.time && (
+                      <ZineText size="sm" style={{ color: tokens.colors.inkLight }}>
+                        {recipe.time}
+                      </ZineText>
+                    )}
+                    {recipe.servings && (
+                      <ZineText size="sm" style={{ color: tokens.colors.inkLight }}>
+                        {recipe.servings}
+                      </ZineText>
+                    )}
+                  </div>
+
+                  {/* Ingredients */}
+                  <ZineText size="lg" style={{ display: 'block', marginBottom: 12 }}>
+                    {t('recipe.ingredients') || 'Ingredienti'}
+                  </ZineText>
+                  <DashedBox style={{ marginBottom: 24 }}>
+                    {recipe.ingredients.map((ing, i) => (
+                      <div key={i} style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                        marginBottom: i < recipe.ingredients.length - 1 ? 8 : 0,
+                        fontFamily: tokens.fonts.hand,
+                        fontSize: 17,
+                        color: tokens.colors.ink,
+                      }}>
+                        <div style={{
+                          width: 16,
+                          height: 16,
+                          border: `1.5px solid ${tokens.colors.ink}`,
+                          borderRadius: 3,
+                          flexShrink: 0,
+                        }} />
+                        {ing}
+                      </div>
+                    ))}
+                  </DashedBox>
+
+                  {/* Steps */}
+                  <ZineText size="lg" style={{ display: 'block', marginBottom: 12 }}>
+                    {t('recipe.steps') || 'Preparazione'}
+                  </ZineText>
+                  <div style={{ marginBottom: 24 }}>
+                    {recipe.steps.map((step, i) => (
+                      <div key={i} style={{
+                        display: 'flex',
+                        gap: 14,
+                        marginBottom: 20,
+                      }}>
+                        <div style={{
+                          width: 28,
+                          height: 28,
+                          borderRadius: '50%',
+                          border: `1.5px solid ${tokens.colors.ink}`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          fontFamily: tokens.fonts.hand,
+                          fontSize: 16,
+                          color: tokens.colors.ink,
+                        }}>
+                          {i + 1}
+                        </div>
+                        <p style={{
+                          fontFamily: tokens.fonts.hand,
+                          fontSize: 17,
+                          color: tokens.colors.ink,
+                          margin: 0,
+                          lineHeight: 1.5,
+                          flex: 1,
+                        }}>
+                          {step}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Actions */}
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <button
+                      onClick={() => toggleRecipeFavorite(recipe.id)}
+                      style={{
+                        flex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                        padding: '12px 16px',
+                        background: recipe.isFavorite ? tokens.colors.cream : 'transparent',
+                        border: `1.5px dashed ${tokens.colors.inkFaded}`,
+                        borderRadius: 8,
+                        fontFamily: tokens.fonts.hand,
+                        fontSize: 17,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <svg width="20" height="20" viewBox="0 0 20 20" fill={recipe.isFavorite ? tokens.colors.ink : "none"}>
+                        <path d="M10 17 Q4 12 4 8 Q4 4 7 4 Q9 4 10 6 Q11 4 13 4 Q16 4 16 8 Q16 12 10 17" stroke={tokens.colors.ink} strokeWidth="1.5"/>
+                      </svg>
+                      {recipe.isFavorite ? (t('recipe.favorited') || 'Preferita') : (t('recipe.favorite') || 'Preferisci')}
+                    </button>
+                    <button
+                      onClick={() => shareRecipe({
+                        name: recipe.name,
+                        time: recipe.time,
+                        servings: recipe.servings,
+                        ingredients: recipe.ingredients,
+                        steps: recipe.steps,
+                      })}
+                      style={{
+                        flex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 8,
+                        padding: '12px 16px',
+                        background: 'transparent',
+                        border: `1.5px dashed ${tokens.colors.inkFaded}`,
+                        borderRadius: 8,
+                        fontFamily: tokens.fonts.hand,
+                        fontSize: 17,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.ink} strokeWidth="1.5">
+                        <path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                      {t('recipe.share') || 'Condividi'}
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Recipes List View */}
+            {!routeId && (
+              <>
             {/* Empty State - not logged in */}
             {!isAuthenticated && (
               <div style={{ textAlign: 'center', padding: '60px 20px' }}>
@@ -1411,7 +1693,7 @@ export default function App() {
                   {t('recipes.emptyHint') || 'Chiedi una ricetta in chat e salvala qui'}
                 </ZineText>
                 <button
-                  onClick={() => setScreen('chat')}
+                  onClick={() => navigate('/chat')}
                   style={{
                     marginTop: 20,
                     padding: '10px 24px',
@@ -1492,6 +1774,8 @@ export default function App() {
                     </div>
                   </div>
                 ))}
+              </>
+            )}
               </>
             )}
           </div>
@@ -2235,7 +2519,7 @@ export default function App() {
         {/* Chat FAB - visible only on recipes and pantry screens */}
         {(screen === 'recipes' || screen === 'pantry') && (
           <button
-            onClick={() => setScreen('chat')}
+            onClick={() => navigate('/chat')}
             style={{
               position: 'fixed',
               bottom: isMobile ? 24 : 32,
