@@ -7,6 +7,7 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import { RECIPE_CATEGORIES, type RecipeCategory } from '../../config/recipeCategories';
 import { getRecipeIcon, hasRecipeIcon } from '../../config/recipeIcons';
+import { UnderlinedText } from './ZineUI';
 
 // ============================================
 // 🎨 DESIGN TOKENS
@@ -666,14 +667,18 @@ export const IngredientsList: React.FC<IngredientsListProps> = ({
   onToggle
 }) => (
   <div style={{ marginBottom: 28 }}>
-    <h3 style={{
-      fontFamily: tokens.fonts.hand,
-      fontSize: 20,
-      color: tokens.colors.ink,
-      marginBottom: 12,
-    }}>
-      Ingredienti
-    </h3>
+    <div style={{ marginBottom: 16 }}>
+      <UnderlinedText>
+        <span style={{
+          fontFamily: tokens.fonts.hand,
+          fontSize: 20,
+          fontWeight: 'bold',
+          color: tokens.colors.ink,
+        }}>
+          Ingredienti
+        </span>
+      </UnderlinedText>
+    </div>
     <DashedBox>
       {ingredients.map((ing, i) => (
         <IngredientItem
@@ -710,25 +715,20 @@ interface RecipeStepProps {
 export const RecipeStep: React.FC<RecipeStepProps> = ({ number, text, tip }) => (
   <div style={{
     display: 'flex',
-    gap: 14,
-    marginBottom: 20,
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 16,
   }}>
-    {/* Numero step */}
-    <div style={{
-      width: 28,
-      height: 28,
-      borderRadius: '50%',
-      border: `1.5px solid ${tokens.colors.ink}`,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexShrink: 0,
+    {/* Numero step - stile SharePage */}
+    <span style={{
       fontFamily: tokens.fonts.hand,
-      fontSize: 16,
+      fontSize: 20,
+      fontWeight: 'bold',
       color: tokens.colors.ink,
+      minWidth: 24,
     }}>
-      {number}
-    </div>
+      {number}.
+    </span>
 
     <div style={{ flex: 1 }}>
       <p style={{
@@ -774,14 +774,18 @@ interface StepsListProps {
  */
 export const StepsList: React.FC<StepsListProps> = ({ steps = [] }) => (
   <div style={{ marginBottom: 28 }}>
-    <h3 style={{
-      fontFamily: tokens.fonts.hand,
-      fontSize: 20,
-      color: tokens.colors.ink,
-      marginBottom: 16,
-    }}>
-      Preparazione
-    </h3>
+    <div style={{ marginBottom: 16 }}>
+      <UnderlinedText>
+        <span style={{
+          fontFamily: tokens.fonts.hand,
+          fontSize: 20,
+          fontWeight: 'bold',
+          color: tokens.colors.ink,
+        }}>
+          Preparazione
+        </span>
+      </UnderlinedText>
+    </div>
     {steps.map((step, i) => (
       <RecipeStep
         key={i}
@@ -794,29 +798,37 @@ export const StepsList: React.FC<StepsListProps> = ({ steps = [] }) => (
 );
 
 /**
- * Nota finale della ricetta
+ * Nota finale della ricetta - stile SharePage (box giallo)
  */
 export const RecipeNote: React.FC<MessageProps> = ({ children }) => (
-  <SketchBox style={{ background: `${tokens.colors.paperDark}40`, marginTop: 20 }}>
-    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-      {/* Hand-drawn note icon */}
-      <svg width="16" height="16" viewBox="0 0 20 20" fill="none" style={{ flexShrink: 0, marginTop: 2 }}>
-        <path d="M4 2 L14 2 L18 6 L18 18 L4 18 Z" stroke={tokens.colors.inkLight} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M14 2 L14 6 L18 6" stroke={tokens.colors.inkLight} strokeWidth="1.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
-        <path d="M7 10 L15 10 M7 14 L13 14" stroke={tokens.colors.inkLight} strokeWidth="1" strokeLinecap="round"/>
-      </svg>
-      <p style={{
+  <div style={{
+    marginTop: 20,
+    padding: 16,
+    background: '#FFF9E6',
+    borderRadius: 8,
+    border: '1px dashed #E8D5A3',
+  }}>
+    <div style={{ marginBottom: 8 }}>
+      <span style={{
         fontFamily: tokens.fonts.hand,
-        fontSize: 15,
-        color: tokens.colors.inkLight,
-        fontStyle: 'italic',
-        margin: 0,
-        lineHeight: 1.4,
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: tokens.colors.ink,
       }}>
-        {children}
-      </p>
+        Consigli
+      </span>
     </div>
-  </SketchBox>
+    <p style={{
+      fontFamily: tokens.fonts.hand,
+      fontSize: 15,
+      color: tokens.colors.inkLight,
+      fontStyle: 'italic',
+      margin: 0,
+      lineHeight: 1.5,
+    }}>
+      {children}
+    </p>
+  </div>
 );
 
 // ============================================
