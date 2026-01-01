@@ -5,6 +5,7 @@
 
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
+import type { RecipeCategory } from '../../types/chat';
 
 // ============================================
 // 🎨 DESIGN TOKENS
@@ -52,55 +53,114 @@ export const Brace = ({ height = 40 }: { height?: number }) => (
 
 // ============================================
 // 🍳 FOOD ICONS
+// Keys must match RecipeCategory from types/chat.ts
 // ============================================
 
-export const FoodIcons: Record<string, React.FC<{ size?: number }>> = {
+export const FoodIcons: Record<RecipeCategory, React.FC<{ size?: number }>> = {
+  // Uovo - UNA ellisse verticale
   egg: ({ size = 28 }) => (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
       <ellipse cx="16" cy="18" rx="8" ry="11" stroke={tokens.colors.ink} strokeWidth="1.2"/>
     </svg>
   ),
+
+  // Spaghetto - UNA curva sinuosa
   pasta: ({ size = 28 }) => (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
-      <rect x="10" y="4" width="12" height="24" rx="1" stroke={tokens.colors.ink} strokeWidth="1.2"/>
-      <path d="M14 10 L14 22 M18 10 L18 22" stroke={tokens.colors.ink} strokeWidth="1"/>
+      <path d="M8 24 C12 8, 20 8, 24 24" stroke={tokens.colors.ink} strokeWidth="1.2" strokeLinecap="round"/>
     </svg>
   ),
-  bowl: ({ size = 28 }) => (
+
+  // Bistecca - UNA ellisse orizzontale
+  meat: ({ size = 28 }) => (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
-      <path d="M4 14 Q4 26 16 26 Q28 26 28 14" stroke={tokens.colors.ink} strokeWidth="1.2"/>
-      <ellipse cx="16" cy="14" rx="12" ry="4" stroke={tokens.colors.ink} strokeWidth="1.2"/>
+      <ellipse cx="16" cy="16" rx="11" ry="7" stroke={tokens.colors.ink} strokeWidth="1.2"/>
     </svg>
   ),
-  tomato: ({ size = 28 }) => (
+
+  // Pesce - UN rombo arrotondato
+  fish: ({ size = 28 }) => (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
-      <circle cx="16" cy="18" r="10" stroke={tokens.colors.ink} strokeWidth="1.2"/>
-      <path d="M16 8 L16 5" stroke={tokens.colors.ink} strokeWidth="1.2" strokeLinecap="round"/>
+      <path d="M4 16 Q16 6, 28 16 Q16 26, 4 16" stroke={tokens.colors.ink} strokeWidth="1.2"/>
     </svg>
   ),
-  bread: ({ size = 28 }) => (
+
+  // Ciotola - UN semicerchio aperto
+  soup: ({ size = 28 }) => (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
-      <path d="M6 18 Q6 10 16 10 Q26 10 26 18 L26 24 L6 24 Z" stroke={tokens.colors.ink} strokeWidth="1.2"/>
+      <path d="M4 14 Q16 28, 28 14" stroke={tokens.colors.ink} strokeWidth="1.2" strokeLinecap="round"/>
     </svg>
   ),
-  cheese: ({ size = 28 }) => (
-    <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
-      <path d="M4 24 L16 6 L28 24 Z" stroke={tokens.colors.ink} strokeWidth="1.2" strokeLinejoin="round"/>
-      <circle cx="12" cy="20" r="2" stroke={tokens.colors.ink} strokeWidth="1"/>
-      <circle cx="20" cy="18" r="1.5" stroke={tokens.colors.ink} strokeWidth="1"/>
-    </svg>
-  ),
+
+  // Foglia - UNA mandorla verticale
   salad: ({ size = 28 }) => (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
-      <path d="M4 16 Q4 26 16 26 Q28 26 28 16" stroke={tokens.colors.ink} strokeWidth="1.2"/>
-      <ellipse cx="16" cy="16" rx="12" ry="4" stroke={tokens.colors.ink} strokeWidth="1.2"/>
+      <path d="M16 4 Q28 16, 16 28 Q4 16, 16 4" stroke={tokens.colors.ink} strokeWidth="1.2"/>
     </svg>
   ),
+
+  // Pagnotta - UNA ellisse larga
+  bread: ({ size = 28 }) => (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <ellipse cx="16" cy="16" rx="11" ry="8" stroke={tokens.colors.ink} strokeWidth="1.2"/>
+    </svg>
+  ),
+
+  // Pizza - UN triangolo
   pizza: ({ size = 28 }) => (
     <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
       <path d="M16 4 L4 28 L28 28 Z" stroke={tokens.colors.ink} strokeWidth="1.2" strokeLinejoin="round"/>
-      <circle cx="12" cy="20" r="2" stroke={tokens.colors.ink} strokeWidth="1"/>
-      <circle cx="18" cy="22" r="1.5" stroke={tokens.colors.ink} strokeWidth="1"/>
+    </svg>
+  ),
+
+  // Gelato - cono + pallina (2 forme unite)
+  dessert: ({ size = 28 }) => (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <circle cx="16" cy="10" r="7" stroke={tokens.colors.ink} strokeWidth="1.2"/>
+      <path d="M10 14 L16 28 L22 14" stroke={tokens.colors.ink} strokeWidth="1.2" strokeLinejoin="round"/>
+    </svg>
+  ),
+
+  // Formaggio - UN triangolo
+  cheese: ({ size = 28 }) => (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <path d="M4 26 L16 4 L28 26 Z" stroke={tokens.colors.ink} strokeWidth="1.2" strokeLinejoin="round"/>
+    </svg>
+  ),
+
+  // Carota - UN triangolo stretto verticale
+  vegetable: ({ size = 28 }) => (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <path d="M16 4 L10 28 L22 28 Z" stroke={tokens.colors.ink} strokeWidth="1.2" strokeLinejoin="round"/>
+    </svg>
+  ),
+
+  // Mela - cerchio + gambo
+  fruit: ({ size = 28 }) => (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <circle cx="16" cy="18" r="10" stroke={tokens.colors.ink} strokeWidth="1.2"/>
+      <path d="M16 8 L16 4" stroke={tokens.colors.ink} strokeWidth="1.2" strokeLinecap="round"/>
+    </svg>
+  ),
+
+  // Bicchiere - UN trapezio
+  drink: ({ size = 28 }) => (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <path d="M8 4 L6 28 L26 28 L24 4" stroke={tokens.colors.ink} strokeWidth="1.2" strokeLinejoin="round"/>
+    </svg>
+  ),
+
+  // Goccia - UNA forma a goccia
+  sauce: ({ size = 28 }) => (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <path d="M16 4 Q26 18, 16 28 Q6 18, 16 4" stroke={tokens.colors.ink} strokeWidth="1.2"/>
+    </svg>
+  ),
+
+  // Bowl = soup (semicerchio)
+  bowl: ({ size = 28 }) => (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none">
+      <path d="M4 14 Q16 28, 28 14" stroke={tokens.colors.ink} strokeWidth="1.2" strokeLinecap="round"/>
     </svg>
   ),
 };
@@ -303,7 +363,7 @@ export const AIMessage: React.FC<AIMessageProps> = ({ children, isStreaming }) =
 // ============================================
 
 interface RecipeCardInlineProps {
-  icon?: string;
+  icon?: RecipeCategory;
   title: string;
   description?: string;
   time?: string;
@@ -323,7 +383,7 @@ export const RecipeCardInline: React.FC<RecipeCardInlineProps> = ({
   difficulty,
   onClick
 }) => {
-  const IconComponent = FoodIcons[icon] || FoodIcons.bowl;
+  const IconComponent = FoodIcons[icon];
 
   return (
     <div
@@ -524,7 +584,8 @@ interface RecipeHeaderProps {
   time?: string;
   difficulty?: string;
   servings?: number | string;
-  icon?: string;
+  category?: RecipeCategory; // Recipe category for icon selection
+  iconSvg?: string;  // Deprecated: kept for backwards compatibility
 }
 
 /**
@@ -536,14 +597,26 @@ export const RecipeHeader: React.FC<RecipeHeaderProps> = ({
   time,
   difficulty,
   servings,
-  icon = 'bowl'
+  category,
+  iconSvg,
 }) => {
-  const IconComponent = FoodIcons[icon] || FoodIcons.bowl;
+  // Priority: category-based icon > legacy iconSvg > default bowl
+  const IconComponent = category ? FoodIcons[category] : FoodIcons.bowl;
 
   return (
     <div style={{ marginBottom: 24 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 12 }}>
-        <IconComponent size={48} />
+        {/* Use category-based icon, fall back to iconSvg for old saved recipes */}
+        {category ? (
+          <IconComponent size={48} />
+        ) : iconSvg ? (
+          <div
+            dangerouslySetInnerHTML={{ __html: iconSvg }}
+            style={{ width: 48, height: 48, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          />
+        ) : (
+          <FoodIcons.bowl size={48} />
+        )}
         <div>
           <h2 style={{
             fontFamily: tokens.fonts.hand,
@@ -841,7 +914,8 @@ export const RecipeNote: React.FC<MessageProps> = ({ children }) => (
 // ============================================
 
 interface RecipeDetailProps {
-  icon?: string;
+  category?: RecipeCategory;  // Recipe category for icon selection
+  iconSvg?: string;   // Deprecated: kept for backwards compatibility
   title: string;
   description?: string;
   time?: string;
@@ -858,7 +932,8 @@ interface RecipeDetailProps {
  * Ricetta completa - tutto insieme
  */
 export const RecipeDetail: React.FC<RecipeDetailProps> = ({
-  icon,
+  category,
+  iconSvg,
   title,
   description,
   time,
@@ -872,7 +947,8 @@ export const RecipeDetail: React.FC<RecipeDetailProps> = ({
 }) => (
   <div>
     <RecipeHeader
-      icon={icon}
+      category={category}
+      iconSvg={iconSvg}
       title={title}
       description={description}
       time={time}
@@ -935,9 +1011,9 @@ export const RecipeInChat: React.FC<RecipeInChatProps> = ({
             gap: 8,
             flex: 1,
             padding: '10px 16px',
-            background: isSaved ? '#F0EBE3' : 'transparent',
-            color: isSaved ? '#8B857C' : '#2D2A26',
-            border: isSaved ? 'none' : '1.5px dashed #C4C0B9',
+            background: 'transparent',
+            color: '#2D2A26',
+            border: isSaved ? '1.5px solid #2D2A26' : '1.5px dashed #C4C0B9',
             borderRadius: 8,
             fontFamily: "'Caveat', cursive",
             fontSize: 17,
@@ -948,14 +1024,14 @@ export const RecipeInChat: React.FC<RecipeInChatProps> = ({
           {isSaving ? (
             <>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ animation: 'spin 1s linear infinite' }}>
-                <circle cx="8" cy="8" r="6" stroke="#8B857C" strokeWidth="2" strokeDasharray="20 10" />
+                <circle cx="8" cy="8" r="6" stroke="#2D2A26" strokeWidth="2" strokeDasharray="20 10" />
               </svg>
               Salvo...
             </>
           ) : isSaved ? (
             <>
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M3 8L6 11L13 4" stroke="#8B857C" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M3 8L6 11L13 4" stroke="#2D2A26" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
               Salvata
             </>
@@ -1011,7 +1087,7 @@ export const RecipeInChat: React.FC<RecipeInChatProps> = ({
 // ============================================
 
 interface Recipe {
-  icon?: string;
+  icon?: RecipeCategory;
   title?: string;
   name?: string;
   description?: string;
@@ -1106,8 +1182,7 @@ export const ConversationListItem: React.FC<ConversationListItemProps> = ({
       padding: '10px 12px',
       borderRadius: 8,
       cursor: 'pointer',
-      background: isActive ? tokens.colors.paperDark : 'transparent',
-      transition: 'background 0.15s',
+      background: 'transparent',
     }}
   >
     <span style={{
