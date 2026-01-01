@@ -4,7 +4,6 @@ import {
   ZineText,
   ZineRecipeCard,
   ZineNoteCard,
-  ZinePhotoCard,
   Underline,
   SketchHeart
 } from './components/ui/ZineUI';
@@ -90,6 +89,81 @@ const NavItemBorder = () => (
       strokeLinecap="round"
     />
   </svg>
+);
+
+// Compact Recipe Card for favorites horizontal scroll
+const CompactRecipeCard = ({
+  name,
+  iconSvg,
+  Illustration,
+  onClick
+}: {
+  name: string;
+  iconSvg?: string;
+  Illustration?: React.ComponentType<{ size?: number }>;
+  onClick?: () => void;
+}) => (
+  <div
+    onClick={onClick}
+    style={{
+      position: 'relative',
+      padding: '12px 16px',
+      minWidth: 140,
+      maxWidth: 160,
+      flexShrink: 0,
+      cursor: onClick ? 'pointer' : 'default',
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10,
+    }}
+  >
+    {/* Hand-drawn border */}
+    <svg
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        pointerEvents: 'none',
+      }}
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      fill="none"
+    >
+      <path
+        d="M2 4 Q0 0 4 2 L96 2 Q100 0 98 4 L98 96 Q100 100 96 98 L4 98 Q0 100 2 96 Z"
+        stroke="#2D2A26"
+        strokeWidth="0.8"
+        fill="none"
+        strokeLinecap="round"
+      />
+    </svg>
+    {/* Icon */}
+    <div style={{ flexShrink: 0 }}>
+      {iconSvg ? (
+        <div
+          dangerouslySetInnerHTML={{ __html: iconSvg }}
+          style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        />
+      ) : Illustration ? (
+        <Illustration size={28} />
+      ) : (
+        <SketchBowl size={28} />
+      )}
+    </div>
+    {/* Name */}
+    <span style={{
+      fontFamily: "'Caveat', cursive",
+      fontSize: 15,
+      color: '#2D2A26',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+      whiteSpace: 'nowrap',
+    }}>
+      {name}
+    </span>
+  </div>
 );
 
 // Nav Icons - using GustoIcons with active state
@@ -1896,15 +1970,14 @@ export default function App() {
                     <ZineText size="md" style={{ color: '#8B857C', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
                       <SketchHeart size={18} /> {t('recipes.favorites')}
                     </ZineText>
-                    <div style={{ display: 'flex', gap: 20, overflowX: 'auto', paddingBottom: 16, marginBottom: 24 }}>
-                      {favoriteRecipes.map((r, idx) => (
-                        <ZinePhotoCard
+                    <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 16, marginBottom: 24 }}>
+                      {favoriteRecipes.map((r) => (
+                        <CompactRecipeCard
                           key={r.id}
+                          name={r.name}
                           iconSvg={r.iconSvg}
                           Illustration={r.iconSvg ? undefined : SketchBowl}
-                          caption={r.name}
-                          note={r.time || ''}
-                          rotation={idx % 2 === 0 ? 2 : -2}
+                          onClick={() => navigate(`/recipes/${r.id}`)}
                         />
                       ))}
                     </div>
