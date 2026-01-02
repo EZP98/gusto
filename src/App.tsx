@@ -2014,20 +2014,17 @@ export default function App() {
             </div>
 
             {/* Esplora il Mondo - Globe section */}
-            <div
-              onClick={() => setGlobeModalOpen(true)}
+            <DashedBox
               style={{
-                position: 'relative',
-                padding: '20px 24px',
                 marginBottom: 28,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 16,
+                padding: '20px 24px',
               }}
             >
-              {/* Hand-drawn border */}
-              <ZineDashedBox strokeWidth={2} />
+              <div onClick={() => setGlobeModalOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1 }}>
               {/* Globe icon */}
               <svg width="48" height="48" viewBox="0 0 48 48" fill="none" style={{ flexShrink: 0 }}>
                 <circle cx="24" cy="24" r="18" stroke="#2D2A26" strokeWidth="1.5" fill="none"/>
@@ -2058,7 +2055,8 @@ export default function App() {
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0 }}>
                 <path d="M9 6 L15 12 L9 18" stroke="#2D2A26" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-            </div>
+              </div>
+            </DashedBox>
 
             {/* Recipes content - only show if logged in and has recipes */}
             {isAuthenticated && savedRecipes.length > 0 && (
