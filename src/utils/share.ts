@@ -37,6 +37,13 @@ export async function createShareLink(recipe: RecipeData): Promise<string | null
 }
 
 /**
+ * Check if device is mobile
+ */
+function isMobile(): boolean {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+
+/**
  * Share a recipe via link
  * Creates a shareable link and opens the share dialog
  */
@@ -52,7 +59,7 @@ export async function shareRecipe(recipe: RecipeData): Promise<boolean> {
   const shareText = `${recipe.name} - Ricetta su Gusto`;
 
   // Try native Web Share API first (works great on mobile)
-  if (navigator.share) {
+  if (navigator.share && isMobile()) {
     try {
       await navigator.share({
         title: recipe.name,
@@ -67,7 +74,21 @@ export async function shareRecipe(recipe: RecipeData): Promise<boolean> {
     }
   }
 
-  // Fallback: Open WhatsApp with link
+  // Desktop: Copy link to clipboard
+  if (!isMobile()) {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      // Show notification (will be handled by caller)
+      alert(`Link copiato!\n${shareUrl}`);
+      return true;
+    } catch {
+      // Fallback: open in new tab
+      window.open(shareUrl, '_blank');
+      return true;
+    }
+  }
+
+  // Mobile fallback: Open WhatsApp with link
   const whatsappText = `${shareText}\n${shareUrl}`;
   const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(whatsappText)}`;
   window.open(whatsappUrl, '_blank');
