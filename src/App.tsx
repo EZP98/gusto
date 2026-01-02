@@ -51,6 +51,7 @@ import {
   IconCamera
 } from './components/ui/GustoIcons';
 import { getWeeklyThemes } from './config/cuisineThemes';
+import { GlobeModal } from './components/globe/GlobeModal';
 
 // Hamburger Icon
 const HamburgerIcon = () => (
@@ -258,6 +259,7 @@ export default function App() {
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [globeModalOpen, setGlobeModalOpen] = useState(false);
   const isOnline = useOnlineStatus();
 
   // Helper to open auth modal with scroll to top
@@ -2008,6 +2010,38 @@ export default function App() {
                     </span>
                   </div>
                 ))}
+                {/* Globe button */}
+                <div
+                  onClick={() => setGlobeModalOpen(true)}
+                  style={{
+                    position: 'relative',
+                    padding: '16px',
+                    flex: 1,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  {/* Hand-drawn border dashed */}
+                  <ZineDashedBox />
+                  {/* Globe icon */}
+                  <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+                    <circle cx="24" cy="24" r="16" stroke="#2D2A26" strokeWidth="1.5" fill="none"/>
+                    <ellipse cx="24" cy="24" rx="8" ry="16" stroke="#2D2A26" strokeWidth="1" fill="none"/>
+                    <path d="M8 24 L40 24" stroke="#2D2A26" strokeWidth="1"/>
+                    <path d="M12 16 L36 16 M12 32 L36 32" stroke="#2D2A26" strokeWidth="0.5" strokeDasharray="2 2"/>
+                  </svg>
+                  <span style={{
+                    fontFamily: "'Caveat', cursive",
+                    fontSize: 14,
+                    color: '#8B857C',
+                    textAlign: 'center',
+                  }}>
+                    Esplora
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -2809,6 +2843,15 @@ export default function App() {
         onLogin={handleLogin}
         onRegister={handleRegister}
         t={t}
+      />
+
+      {/* Globe Modal */}
+      <GlobeModal
+        isOpen={globeModalOpen}
+        onClose={() => setGlobeModalOpen(false)}
+        onSelectCountry={(country) => {
+          sendMessage(`Suggeriscimi un piatto tipico della cucina ${country.toLowerCase()}a con la ricetta completa`);
+        }}
       />
     </ZinePage>
   );
