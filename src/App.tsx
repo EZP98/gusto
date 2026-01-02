@@ -2027,7 +2027,7 @@ export default function App() {
               }}
             >
               {/* Hand-drawn border */}
-              <ZineDashedBox />
+              <ZineDashedBox strokeWidth={2} />
               {/* Globe icon */}
               <svg width="48" height="48" viewBox="0 0 48 48" fill="none" style={{ flexShrink: 0 }}>
                 <circle cx="24" cy="24" r="18" stroke="#2D2A26" strokeWidth="1.5" fill="none"/>
