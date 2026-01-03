@@ -298,6 +298,7 @@ This renders the menu beautifully in the app's native UI with all courses organi
 
 IMPORTANT: ALWAYS write 1-2 sentences of introductory text BEFORE calling the tool.
 Include context about the occasion, season, or theme.
+Wine pairing notes or timing suggestions can go AFTER the tool call.
 Never call display_menu without writing intro text first!
 </formatting_rules>
 
