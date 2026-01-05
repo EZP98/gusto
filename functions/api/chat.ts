@@ -4,9 +4,16 @@
 import { RECIPE_CATEGORY_KEYS, RECIPE_CATEGORY_META } from '../../shared/recipeCategories';
 import { RECIPE_ICONS, RECIPE_ICON_META } from '../../shared/recipeIcons';
 
+// Import auth and usage helpers
+import { getUserFromRequest } from '../lib/auth';
+import { checkUsageLimit, incrementUsage } from '../lib/usage';
+import { createFreeSubscription, getUserSubscription } from '../lib/subscription';
+
 interface Env {
   ANTHROPIC_API_KEY: string;
   PERPLEXITY_API_KEY: string;
+  DB: D1Database;
+  JWT_SECRET: string;
 }
 
 // RAG Index loaded from static file
@@ -188,6 +195,35 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     if (!message) {
       return new Response(JSON.stringify({ error: 'Message is required' }), {
         status: 400,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
+    }
+
+    // Check authentication
+    const user = await getUserFromRequest(request, env.JWT_SECRET);
+    if (!user) {
+      return new Response(JSON.stringify({ error: 'Autenticazione richiesta' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+      });
+    }
+
+    // Ensure user has a subscription record
+    let subscription = await getUserSubscription(env.DB, user.sub);
+    if (!subscription) {
+      await createFreeSubscription(env.DB, user.sub);
+    }
+
+    // Check usage limit
+    const usageCheck = await checkUsageLimit(env.DB, user.sub, 'message');
+    if (usageCheck.isLimitReached) {
+      return new Response(JSON.stringify({
+        error: 'limit_reached',
+        message: 'Hai raggiunto il limite giornaliero di messaggi',
+        usage: usageCheck,
+        upgrade_url: '/pricing'
+      }), {
+        status: 429,
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
@@ -562,6 +598,9 @@ ${perplexityContext}`;
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
       });
     }
+
+    // Increment usage count (before streaming, so we count even if stream fails)
+    await incrementUsage(env.DB, user.sub, 'message');
 
     // Return SSE stream directly
     return new Response(response.body, {

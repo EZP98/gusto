@@ -36,6 +36,8 @@ import { getInitialQuickReplies } from './utils/quickReplies';
 import { extractIntroText } from './utils/recipeParser';
 import { shareRecipe } from './utils/share';
 import { SharePage } from './pages/SharePage';
+import PricingPage from './pages/PricingPage/PricingPage';
+import { useSubscription } from './hooks/useSubscription';
 import {
   SketchEgg,
   SketchTomato,
@@ -135,7 +137,7 @@ const CameraIcon = () => (
 );
 
 // Types
-type Screen = 'home' | 'chat' | 'recipes' | 'pantry' | 'share';
+type Screen = 'home' | 'chat' | 'recipes' | 'pantry' | 'share' | 'pricing';
 
 // UI representation of pantry item (includes illustration component)
 interface PantryItemUI {
@@ -203,6 +205,10 @@ function useRouter() {
       return { screen: 'share', id: parts[1] };
     }
 
+    if (parts[0] === 'pricing') {
+      return { screen: 'pricing' };
+    }
+
     return { screen: 'home' };
   };
 
@@ -239,6 +245,11 @@ export default function App() {
 
   // Auth hook
   const { user, token, isAuthenticated, login, register, logout } = useAuth();
+
+  // Subscription hook
+  const {
+    refreshUsage,
+  } = useSubscription(isAuthenticated);
 
   // Recipes hook
   const {
@@ -550,7 +561,10 @@ export default function App() {
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({
           message: msgToSend,
           history: getHistoryForApi(),
@@ -564,6 +578,23 @@ export default function App() {
       });
 
       clearTimeout(timeoutId);
+
+      // Handle rate limit (usage exceeded)
+      if (response.status === 429) {
+        const data = await response.json();
+        const limitMsg = {
+          it: 'Hai raggiunto il limite giornaliero di messaggi. Passa a Pro per continuare!',
+          en: 'You\'ve reached your daily message limit. Upgrade to Pro to continue!',
+          fr: 'Vous avez atteint votre limite quotidienne de messages. Passez à Pro!',
+          es: 'Has alcanzado el límite diario de mensajes. Pasa a Pro para continuar!',
+          ja: '1日のメッセージ上限に達しました。Proにアップグレードしてください！',
+          'zh-TW': '您已達到每日訊息上限。升級至 Pro 以繼續！',
+        }[language] || data.message;
+        updateMessageContent(aiMsgId, limitMsg, convId);
+        setIsLoading(false);
+        refreshUsage();
+        return;
+      }
 
       if (!response.ok) throw new Error('API error');
 
@@ -804,6 +835,7 @@ export default function App() {
       updateMessageContent(aiMsgId, errorMsg, convId);
     } finally {
       setIsLoading(false);
+      refreshUsage(); // Update usage count after message
     }
   };
 
@@ -827,6 +859,17 @@ export default function App() {
   // Share page - standalone public view (no auth, no nav)
   if (screen === 'share' && routeId) {
     return <SharePage shareId={routeId} onGoToApp={() => navigate('/')} />;
+  }
+
+  // Pricing page
+  if (screen === 'pricing') {
+    return (
+      <PricingPage
+        isAuthenticated={isAuthenticated}
+        onOpenAuth={openAuthModal}
+        onNavigate={navigate}
+      />
+    );
   }
 
   return (
