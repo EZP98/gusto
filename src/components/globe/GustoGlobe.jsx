@@ -155,8 +155,13 @@ export default function GustoGlobe({ isOpen = true, onClose, onSelectCountry, on
             .country-path { transition: fill 0.15s; cursor: pointer; }
             .country-path:hover { fill: rgba(224, 122, 95, 0.25) !important; }
           `}</style>
+          <defs>
+            <clipPath id="globe-clip-inline">
+              <circle cx={0} cy={0} r={radius} />
+            </clipPath>
+          </defs>
           <circle cx={center} cy={center} r={radius} fill={ocean} stroke={ink} strokeWidth={0.3} />
-          <g transform={`translate(${center},${center})`}>
+          <g transform={`translate(${center},${center})`} clipPath="url(#globe-clip-inline)">
             {countryPaths.filter(c => c.visible && c.centroid.depth > 0).map(({ name, paths, id }) => (
               <g key={id} onClick={() => setSelectedCountry(name)} onMouseEnter={() => setHoveredCountry(name)} onMouseLeave={() => setHoveredCountry(null)}>
                 {paths.map((d, i) => (
