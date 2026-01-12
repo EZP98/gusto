@@ -1138,8 +1138,8 @@ export default function App() {
         {/* Content */}
         <main style={{
           flex: 1,
-          overflow: 'auto',
-          padding: isMobile ? '24px 20px 32px' : '48px 40px'
+          overflow: screen === 'mondo' ? 'visible' : 'auto',
+          padding: screen === 'mondo' ? 0 : (isMobile ? '24px 20px 32px' : '48px 40px')
         }}>
 
         {/* ============ HOME ============ */}

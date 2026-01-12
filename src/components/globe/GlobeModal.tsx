@@ -1,7 +1,7 @@
 // GlobeModal - Wrapper for GustoGlobe component
 // The actual globe implementation is in GustoGlobe.jsx
 
-import GustoGlobe from './GustoGlobe';
+import GustoGlobe from './GustoGlobe3D';
 
 interface GlobeModalProps {
   isOpen: boolean;
