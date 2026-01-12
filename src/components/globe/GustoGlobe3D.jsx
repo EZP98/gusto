@@ -3,220 +3,242 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import CulinaryPanel from './CulinaryPanel';
-import { countriesData } from './countriesData';
 
-// Design colors - warm paper aesthetic (identical to SVG version)
+// Design colors - warm paper aesthetic
 const colors = {
   ink: '#2D2A26',
   paper: '#FAF7F2',
   ocean: '#FDF9F3',
-  land: '#F0EBE1',
-  landHover: '#E8E0D3',
+  land: '#D4C4B0',
+  landHover: '#C9B8A1',
   highlight: '#E07A5F',
-  border: '#C5B9A8'
+  border: '#B8A992'
 };
 
-// Generate equirectangular texture from country data
-function generateGlobeTexture(countries, highlightedCountry = null, selectedCountry = null) {
-  const width = 2048;
-  const height = 1024;
+// Convert lat/lng to 3D position on sphere
+function latLngToVector3(lat, lng, radius = 1) {
+  const phi = (90 - lat) * (Math.PI / 180);
+  const theta = (lng + 180) * (Math.PI / 180);
+  const x = -(radius * Math.sin(phi) * Math.cos(theta));
+  const z = radius * Math.sin(phi) * Math.sin(theta);
+  const y = radius * Math.cos(phi);
+  return [x, y, z];
+}
 
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
+// Convert GeoJSON to 3D points for point cloud rendering
+function geoJsonToPoints(features, radius) {
+  const points = [];
+  const countryBounds = []; // Store country info for hit detection
 
-  // Fill ocean background
-  ctx.fillStyle = colors.ocean;
-  ctx.fillRect(0, 0, width, height);
+  features.forEach((feature) => {
+    const geometry = feature.geometry;
+    const countryName = feature.properties?.NAME || feature.properties?.ADMIN || 'Unknown';
+    if (!geometry) return;
 
-  // Convert lng/lat to pixel coordinates (equirectangular projection)
-  const lngLatToPixel = (lng, lat) => {
-    const x = ((lng + 180) / 360) * width;
-    const y = ((90 - lat) / 180) * height;
-    return [x, y];
-  };
+    const countryPoints = [];
 
-  // Draw each country
-  for (const country of countries) {
-    if (!country.p) continue;
-
-    // Determine fill color based on state
-    let fillColor = colors.land;
-    if (selectedCountry === country.n) {
-      fillColor = colors.highlight;
-    } else if (highlightedCountry === country.n) {
-      fillColor = colors.landHover;
-    }
-
-    // Draw each polygon of the country
-    for (const polygon of country.p) {
-      if (polygon.length < 3) continue;
-
-      ctx.beginPath();
-      const [startX, startY] = lngLatToPixel(polygon[0][0], polygon[0][1]);
-      ctx.moveTo(startX, startY);
-
-      for (let i = 1; i < polygon.length; i++) {
-        const [x, y] = lngLatToPixel(polygon[i][0], polygon[i][1]);
-        ctx.lineTo(x, y);
+    const processCoordinates = (coords) => {
+      for (let i = 0; i < coords.length; i++) {
+        const [lng, lat] = coords[i];
+        const [x, y, z] = latLngToVector3(lat, lng, radius);
+        points.push(x, y, z);
+        countryPoints.push({ lat, lng });
       }
+    };
 
-      ctx.closePath();
-      ctx.fillStyle = fillColor;
-      ctx.fill();
-      ctx.strokeStyle = colors.border;
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
+    const processPolygon = (polygon) => {
+      polygon.forEach((ring) => processCoordinates(ring));
+    };
+
+    if (geometry.type === 'Polygon') {
+      processPolygon(geometry.coordinates);
+    } else if (geometry.type === 'MultiPolygon') {
+      geometry.coordinates.forEach((polygon) => processPolygon(polygon));
     }
-  }
 
-  return canvas;
-}
-
-// Point-in-polygon test (ray casting algorithm)
-function pointInPolygon(point, polygon) {
-  const [x, y] = point;
-  let inside = false;
-
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
-    const [xi, yi] = polygon[i];
-    const [xj, yj] = polygon[j];
-
-    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
-      inside = !inside;
-    }
-  }
-
-  return inside;
-}
-
-// Find country at given coordinates
-function findCountryAtPoint(lng, lat, countries) {
-  for (const country of countries) {
-    if (!country.p) continue;
-    for (const polygon of country.p) {
-      if (pointInPolygon([lng, lat], polygon)) {
-        return country;
-      }
-    }
-  }
-  return null;
-}
-
-// Globe mesh with texture
-function GlobeMesh({
-  texture,
-  onCountryClick,
-  onCountryHover,
-  setGlobeMesh
-}) {
-  const meshRef = useRef();
-  const { camera, raycaster, pointer } = useThree();
-
-  useEffect(() => {
-    if (meshRef.current) {
-      setGlobeMesh(meshRef.current);
-    }
-  }, [setGlobeMesh]);
-
-  const handlePointerMove = useCallback((event) => {
-    if (!meshRef.current) return;
-
-    const intersects = raycaster.intersectObject(meshRef.current);
-    if (intersects.length > 0 && intersects[0].uv) {
-      const uv = intersects[0].uv;
-      // UV: x=0-1 around sphere (lng), y=0 south pole to 1 north pole (lat)
-      const lng = (uv.x - 0.5) * 360;
-      const lat = (uv.y - 0.5) * 180;
-      const country = findCountryAtPoint(lng, lat, countriesData);
-      onCountryHover(country ? country.n : null);
-    } else {
-      onCountryHover(null);
-    }
-  }, [raycaster, onCountryHover]);
-
-  const handleClick = useCallback((event) => {
-    if (!meshRef.current) return;
-
-    const intersects = raycaster.intersectObject(meshRef.current);
-    if (intersects.length > 0 && intersects[0].uv) {
-      const uv = intersects[0].uv;
-      const lng = (uv.x - 0.5) * 360;
-      const lat = (uv.y - 0.5) * 180;
-      const country = findCountryAtPoint(lng, lat, countriesData);
-      if (country) {
-        onCountryClick(country.n);
-      }
-    }
-  }, [raycaster, onCountryClick]);
-
-  return (
-    <mesh
-      ref={meshRef}
-      onClick={handleClick}
-      onPointerMove={handlePointerMove}
-      onPointerOut={() => onCountryHover(null)}
-    >
-      <sphereGeometry args={[1, 64, 64]} />
-      <meshBasicMaterial map={texture} />
-    </mesh>
-  );
-}
-
-// Auto-rotate controller
-function AutoRotate({ enabled, speed = 0.15 }) {
-  const { camera } = useThree();
-
-  useFrame(() => {
-    if (enabled) {
-      camera.position.applyAxisAngle(new THREE.Vector3(0, 1, 0), speed * 0.001);
-      camera.lookAt(0, 0, 0);
+    if (countryPoints.length > 0) {
+      // Calculate centroid for hit detection
+      const avgLat = countryPoints.reduce((sum, p) => sum + p.lat, 0) / countryPoints.length;
+      const avgLng = countryPoints.reduce((sum, p) => sum + p.lng, 0) / countryPoints.length;
+      countryBounds.push({
+        name: countryName,
+        centroid: { lat: avgLat, lng: avgLng },
+        points: countryPoints
+      });
     }
   });
 
-  return null;
+  return {
+    points: new Float32Array(points),
+    countries: countryBounds
+  };
 }
 
-// Main 3D scene
-function GlobeScene({
-  selectedCountry,
-  hoveredCountry,
-  onSelectCountry,
-  onHoverCountry,
-  autoRotate
-}) {
-  const [globeMesh, setGlobeMesh] = useState(null);
+// Generate ocean grid points
+function generateOceanPoints(radius) {
+  const points = [];
+  const step = 6; // degrees
 
-  // Generate texture whenever highlight state changes
-  const texture = useMemo(() => {
-    const canvas = generateGlobeTexture(countriesData, hoveredCountry, selectedCountry);
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.needsUpdate = true;
-    return tex;
-  }, [hoveredCountry, selectedCountry]);
+  for (let lat = -80; lat <= 80; lat += step) {
+    for (let lng = -180; lng < 180; lng += step) {
+      const [x, y, z] = latLngToVector3(lat, lng, radius);
+      points.push(x, y, z);
+    }
+  }
+
+  return new Float32Array(points);
+}
+
+// Find closest country to a lat/lng point
+function findClosestCountry(lat, lng, countries) {
+  let closest = null;
+  let minDist = Infinity;
+
+  for (const country of countries) {
+    // Simple distance check to centroid
+    const dLat = country.centroid.lat - lat;
+    const dLng = country.centroid.lng - lng;
+    const dist = Math.sqrt(dLat * dLat + dLng * dLng);
+
+    if (dist < minDist && dist < 15) { // Within 15 degrees
+      minDist = dist;
+      closest = country.name;
+    }
+  }
+
+  return closest;
+}
+
+// Point-in-polygon for more accurate detection
+function pointInCountry(lat, lng, country) {
+  // Check if point is within any polygon ring of the country
+  for (let i = 0; i < country.points.length - 1; i++) {
+    const p1 = country.points[i];
+    const p2 = country.points[i + 1];
+    // Simple proximity check
+    const dist = Math.sqrt(Math.pow(lat - p1.lat, 2) + Math.pow(lng - p1.lng, 2));
+    if (dist < 5) return true;
+  }
+  return false;
+}
+
+// Globe content component
+function GlobeContent({ geoData, selectedCountry, hoveredCountry, onSelectCountry, onHoverCountry }) {
+  const globeRef = useRef();
+  const sphereRef = useRef();
+  const { raycaster, camera } = useThree();
+  const radius = 1;
+  const currentSpeed = useRef(0.1);
+
+  // Process GeoJSON data
+  const { landPoints, oceanPoints, countries } = useMemo(() => {
+    if (!geoData?.features) {
+      return { landPoints: new Float32Array(0), oceanPoints: generateOceanPoints(radius * 0.99), countries: [] };
+    }
+    const { points, countries } = geoJsonToPoints(geoData.features, radius);
+    return {
+      landPoints: points,
+      oceanPoints: generateOceanPoints(radius * 0.99),
+      countries
+    };
+  }, [geoData]);
+
+  // Auto rotate
+  useFrame((_, delta) => {
+    if (globeRef.current) {
+      const targetSpeed = selectedCountry ? 0.02 : 0.1;
+      currentSpeed.current += (targetSpeed - currentSpeed.current) * 0.02;
+      globeRef.current.rotation.y += delta * currentSpeed.current;
+    }
+  });
+
+  // Handle click on globe
+  const handleClick = useCallback((event) => {
+    if (!sphereRef.current) return;
+
+    const intersects = raycaster.intersectObject(sphereRef.current);
+    if (intersects.length > 0) {
+      const point = intersects[0].point;
+      // Convert 3D point back to lat/lng
+      const r = Math.sqrt(point.x * point.x + point.y * point.y + point.z * point.z);
+      const lat = Math.asin(point.y / r) * (180 / Math.PI);
+      const lng = Math.atan2(point.z, -point.x) * (180 / Math.PI) - 180;
+
+      // Find country at this position
+      const country = findClosestCountry(lat, lng, countries);
+      if (country) {
+        onSelectCountry(country);
+      }
+    }
+  }, [raycaster, countries, onSelectCountry]);
+
+  // Handle hover
+  const handlePointerMove = useCallback((event) => {
+    if (!sphereRef.current) return;
+
+    const intersects = raycaster.intersectObject(sphereRef.current);
+    if (intersects.length > 0) {
+      const point = intersects[0].point;
+      const r = Math.sqrt(point.x * point.x + point.y * point.y + point.z * point.z);
+      const lat = Math.asin(point.y / r) * (180 / Math.PI);
+      const lng = Math.atan2(point.z, -point.x) * (180 / Math.PI) - 180;
+
+      const country = findClosestCountry(lat, lng, countries);
+      onHoverCountry(country);
+    } else {
+      onHoverCountry(null);
+    }
+  }, [raycaster, countries, onHoverCountry]);
 
   return (
-    <>
-      <GlobeMesh
-        texture={texture}
-        onCountryClick={onSelectCountry}
-        onCountryHover={onHoverCountry}
-        setGlobeMesh={setGlobeMesh}
-      />
+    <group ref={globeRef}>
+      {/* Ocean background points */}
+      <points>
+        <bufferGeometry>
+          <bufferAttribute
+            attach="attributes-position"
+            args={[oceanPoints, 3]}
+          />
+        </bufferGeometry>
+        <pointsMaterial
+          size={0.012}
+          color={colors.border}
+          transparent
+          opacity={0.3}
+          sizeAttenuation
+        />
+      </points>
 
-      <OrbitControls
-        enablePan={false}
-        enableZoom={true}
-        minDistance={1.5}
-        maxDistance={4}
-        rotateSpeed={0.5}
-        zoomSpeed={0.5}
-      />
+      {/* Land points (countries) */}
+      {landPoints.length > 0 && (
+        <points>
+          <bufferGeometry>
+            <bufferAttribute
+              attach="attributes-position"
+              args={[landPoints, 3]}
+            />
+          </bufferGeometry>
+          <pointsMaterial
+            size={0.015}
+            color={colors.land}
+            transparent
+            opacity={0.9}
+            sizeAttenuation
+          />
+        </points>
+      )}
 
-      <AutoRotate enabled={autoRotate && !selectedCountry} />
-    </>
+      {/* Invisible sphere for raycasting/click detection */}
+      <mesh
+        ref={sphereRef}
+        onClick={handleClick}
+        onPointerMove={handlePointerMove}
+        onPointerOut={() => onHoverCountry(null)}
+      >
+        <sphereGeometry args={[radius, 64, 64]} />
+        <meshBasicMaterial transparent opacity={0} />
+      </mesh>
+    </group>
   );
 }
 
@@ -230,6 +252,15 @@ export default function GustoGlobe3D({
 }) {
   const [selectedCountry, setSelectedCountry] = useState(null);
   const [hoveredCountry, setHoveredCountry] = useState(null);
+  const [geoData, setGeoData] = useState(null);
+
+  // Load GeoJSON data
+  useEffect(() => {
+    fetch('https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson')
+      .then((res) => res.json())
+      .then((data) => setGeoData(data))
+      .catch(console.error);
+  }, []);
 
   const handleSelectCountry = useCallback((country) => {
     setSelectedCountry(country);
@@ -240,7 +271,7 @@ export default function GustoGlobe3D({
 
   if (!isOpen) return null;
 
-  // Inline mode - globe integrato nell'app senza container
+  // Inline mode - globe integrato nell'app
   if (inline) {
     return (
       <div style={{
@@ -255,26 +286,46 @@ export default function GustoGlobe3D({
           style={{
             width: 'min(500px, 90vw)',
             height: 'min(500px, 90vw)',
-            background: 'transparent'
+            background: colors.paper,
+            borderRadius: 16
           }}
         >
           <Canvas
-            camera={{ position: [0, 0, 3], fov: 45 }}
+            camera={{ position: [0, 0, 2.8], fov: 45 }}
             style={{ background: 'transparent' }}
             gl={{ antialias: true, toneMapping: THREE.NoToneMapping }}
             flat
           >
             <Suspense fallback={null}>
-              <GlobeScene
+              <GlobeContent
+                geoData={geoData}
                 selectedCountry={selectedCountry}
                 hoveredCountry={hoveredCountry}
                 onSelectCountry={handleSelectCountry}
                 onHoverCountry={setHoveredCountry}
-                autoRotate={true}
+              />
+              <OrbitControls
+                enablePan={false}
+                enableZoom={true}
+                minDistance={1.8}
+                maxDistance={4}
+                rotateSpeed={0.5}
+                zoomSpeed={0.5}
               />
             </Suspense>
           </Canvas>
         </div>
+
+        {/* Hovered country indicator */}
+        {hoveredCountry && !selectedCountry && (
+          <div style={{
+            fontFamily: "'Caveat', cursive",
+            fontSize: 24,
+            color: colors.highlight
+          }}>
+            {hoveredCountry}
+          </div>
+        )}
 
         {selectedCountry && (
           <div style={{
@@ -372,18 +423,26 @@ export default function GustoGlobe3D({
           }}
         >
           <Canvas
-            camera={{ position: [0, 0, 3], fov: 45 }}
+            camera={{ position: [0, 0, 2.8], fov: 45 }}
             style={{ background: colors.paper }}
             gl={{ antialias: true, toneMapping: THREE.NoToneMapping }}
             flat
           >
             <Suspense fallback={null}>
-              <GlobeScene
+              <GlobeContent
+                geoData={geoData}
                 selectedCountry={selectedCountry}
                 hoveredCountry={hoveredCountry}
                 onSelectCountry={handleSelectCountry}
                 onHoverCountry={setHoveredCountry}
-                autoRotate={true}
+              />
+              <OrbitControls
+                enablePan={false}
+                enableZoom={true}
+                minDistance={1.8}
+                maxDistance={4}
+                rotateSpeed={0.5}
+                zoomSpeed={0.5}
               />
             </Suspense>
           </Canvas>
