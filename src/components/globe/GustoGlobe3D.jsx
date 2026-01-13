@@ -106,11 +106,12 @@ export default function GustoGlobe3D({
     return (
       <div style={{
         display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
+        alignItems: 'flex-start',
+        justifyContent: 'center',
         gap: 24,
         width: '100%',
-        padding: '20px 0'
+        padding: '20px 0',
+        position: 'relative'
       }}>
         <div style={{
           width: globeSize,
@@ -119,13 +120,18 @@ export default function GustoGlobe3D({
           borderRadius: 16,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center'
+          justifyContent: 'center',
+          flexShrink: 0
         }}>
           {globeElement}
         </div>
 
         {hoveredCountry && !selectedCountry && (
           <div style={{
+            position: 'absolute',
+            bottom: 40,
+            left: '50%',
+            transform: 'translateX(-50%)',
             fontFamily: "'Caveat', cursive",
             fontSize: 24,
             color: colors.highlight
@@ -135,13 +141,21 @@ export default function GustoGlobe3D({
         )}
 
         {selectedCountry && (
-          <CulinaryPanel
-            country={selectedCountry}
-            onClose={() => setSelectedCountry(null)}
-            onAskQuestion={(question, context) => {
-              if (onAskQuestion) onAskQuestion(question, context);
-            }}
-          />
+          <div style={{
+            position: 'absolute',
+            top: 20,
+            right: 20,
+            maxHeight: 'calc(100vh - 200px)',
+            overflowY: 'auto'
+          }}>
+            <CulinaryPanel
+              country={selectedCountry}
+              onClose={() => setSelectedCountry(null)}
+              onAskQuestion={(question, context) => {
+                if (onAskQuestion) onAskQuestion(question, context);
+              }}
+            />
+          </div>
         )}
       </div>
     );
