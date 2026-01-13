@@ -143,8 +143,9 @@ export default function GustoGlobe3D({
         {selectedCountry && (
           <div style={{
             position: 'absolute',
-            top: 20,
-            right: 20,
+            top: '50%',
+            left: 'calc(50% + 360px)',
+            transform: 'translateY(-50%)',
             maxHeight: 'calc(100vh - 200px)',
             overflowY: 'auto'
           }}>
