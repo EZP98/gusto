@@ -144,9 +144,9 @@ export default function GustoGlobe3D({
           <div style={{
             position: 'absolute',
             top: '50%',
-            left: 'calc(50% + 360px)',
+            left: 'calc(50% + 320px)',
             transform: 'translateY(-50%)',
-            maxHeight: 'calc(100vh - 200px)',
+            maxHeight: 'calc(100vh - 100px)',
             overflowY: 'auto'
           }}>
             <CulinaryPanel
